@@ -23,6 +23,7 @@ import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import ApiService, { ServerSettings } from '../services/ApiService';
+import AuthService from '../services/AuthService';
 
 interface SettingsScreenProps {
   onConnectionSuccess?: () => void;
@@ -57,24 +58,64 @@ export default function SettingsScreen({ onConnectionSuccess }: SettingsScreenPr
       
       await updateSettings(newSettings);
       
-      // Bağlantıyı test et (sessizce, alert göstermeden)
+      // Bağlantıyı test et
       const isConnected = await ApiService.testConnection();
       
       if (isConnected) {
-        // Başarılı - Login ekranına yönlendir
-        Alert.alert(
-          'Connection Successful',
-          'Successfully connected to the server!',
-          [{
-            text: 'Continue to Login',
-            onPress: () => {
-              if (onConnectionSuccess) {
-                onConnectionSuccess();
+        // Bağlantı başarılı - Remember me kontrolü yap
+        const hasRememberMe = await AuthService.isLoggedIn();
+        
+        if (hasRememberMe) {
+          // Remember me var, otomatik login dene
+          const autoLoginSuccess = await AuthService.simpleAutoLogin();
+          
+          if (autoLoginSuccess) {
+            // Otomatik login başarılı - direkt Home'a git
+            Alert.alert(
+              'Welcome Back!',
+              'Automatically logged in. Redirecting to dashboard...',
+              [{
+                text: 'Continue',
+                onPress: () => {
+                  if (onConnectionSuccess) {
+                    onConnectionSuccess();
+                  }
+                }
+              }],
+              { cancelable: false }
+            );
+          } else {
+            // Otomatik login başarısız - Login ekranına git
+            Alert.alert(
+              'Connection Successful',
+              'Server connected successfully. Please login to continue.',
+              [{
+                text: 'Continue to Login',
+                onPress: () => {
+                  if (onConnectionSuccess) {
+                    onConnectionSuccess();
+                  }
+                }
+              }],
+              { cancelable: false }
+            );
+          }
+        } else {
+          // Remember me yok - Login ekranına git
+          Alert.alert(
+            'Connection Successful',
+            'Server connected successfully. Please login to continue.',
+            [{
+              text: 'Continue to Login',
+              onPress: () => {
+                if (onConnectionSuccess) {
+                  onConnectionSuccess();
+                }
               }
-            }
-          }],
-          { cancelable: false }
-        );
+            }],
+            { cancelable: false }
+          );
+        }
       } else {
         // Başarısız - Settings'de kal
         Alert.alert(

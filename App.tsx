@@ -333,33 +333,69 @@ function MainApp() {
 
   const checkInitialSetup = async () => {
     try {
-      // Her zaman Settings ekranından başla
-      setCurrentScreen('Settings');
+      console.log('[App] Starting initial setup check...');
       
-      // Arka planda bağlantı durumunu kontrol et
+      // 1. Önce server ayarları var mı kontrol et
+      const serverSettings = await ApiService.getCurrentSettings();
+      console.log('[App] Server settings:', serverSettings);
+      
+      if (!serverSettings || !serverSettings.serverHost) {
+        // İlk kurulum - Settings ekranına yönlendir
+        console.log('[App] No server settings found, redirecting to Settings');
+        setCurrentScreen('Settings');
+        setIsLoading(false);
+        return;
+      }
+      
+      // 2. Server ayarları var, bağlantı testi yap
+      console.log('[App] Testing server connection...');
       const connected = await ApiService.testConnection();
       setIsConnected(connected);
+      console.log('[App] Connection test result:', connected);
       
-      // Eğer bağlantı varsa ve kayıtlı kullanıcı varsa,
-      // kullanıcı Settings'den manuel olarak test connection yaptığında
-      // otomatik olarak login ekranına yönlendirilecek
-      if (connected) {
-        const isLoggedIn = await AuthService.isLoggedIn();
-        if (isLoggedIn) {
-          // Sadece durumu kaydet, ekran değiştirme
-          const autoLoginSuccess = await AuthService.simpleAutoLogin();
-          if (autoLoginSuccess) {
-            const user = AuthService.getCurrentUser();
-            setCurrentUser(user);
-            setIsAuthenticated(true);
-            // Kullanıcı Settings'den çıktığında Home'a gidecek
-          }
+      if (!connected) {
+        // Bağlantı başarısız - Settings ekranına yönlendir
+        console.log('[App] Connection failed, redirecting to Settings');
+        setCurrentScreen('Settings');
+        setIsLoading(false);
+        return;
+      }
+      
+      // 3. Bağlantı başarılı, remember me kontrolü yap
+      console.log('[App] Connection successful, checking remember me...');
+      const isLoggedIn = await AuthService.isLoggedIn();
+      console.log('[App] Remember me status:', isLoggedIn);
+      
+      if (isLoggedIn) {
+        // Remember me var, otomatik login dene
+        console.log('[App] Attempting auto login...');
+        const autoLoginSuccess = await AuthService.simpleAutoLogin();
+        console.log('[App] Auto login result:', autoLoginSuccess);
+        
+        if (autoLoginSuccess) {
+          // Otomatik login başarılı - direkt Home'a git
+          const user = AuthService.getCurrentUser();
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          setCurrentScreen('Home');
+          console.log('[App] Auto login successful, redirecting to Home');
+        } else {
+          // Otomatik login başarısız - Login ekranına git
+          console.log('[App] Auto login failed, redirecting to Login');
+          setCurrentScreen('Login');
         }
+      } else {
+        // Remember me yok - Login ekranına git
+        console.log('[App] No remember me, redirecting to Login');
+        setCurrentScreen('Login');
       }
     } catch (error) {
-      console.error('Error checking initial setup:', error);
+      console.error('[App] Error during initial setup:', error);
+      // Hata durumunda Settings ekranına yönlendir
+      setCurrentScreen('Settings');
     } finally {
       setIsLoading(false);
+      console.log('[App] Initial setup completed');
     }
   };
 
@@ -382,9 +418,38 @@ function MainApp() {
     setCurrentScreen('Home');
   };
 
-  const handleConnectionSuccess = () => {
+  const handleConnectionSuccess = async () => {
     setIsConnected(true);
-    setCurrentScreen('Login');
+    
+    // Settings'den gelen başarılı bağlantı sonrası remember me kontrolü
+    try {
+      const hasRememberMe = await AuthService.isLoggedIn();
+      
+      if (hasRememberMe) {
+        // Remember me var, otomatik login dene
+        const autoLoginSuccess = await AuthService.simpleAutoLogin();
+        
+        if (autoLoginSuccess) {
+          // Otomatik login başarılı - direkt Home'a git
+          const user = AuthService.getCurrentUser();
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          setCurrentScreen('Home');
+          console.log('[App] Auto login from Settings successful, redirecting to Home');
+        } else {
+          // Otomatik login başarısız - Login ekranına git
+          console.log('[App] Auto login from Settings failed, redirecting to Login');
+          setCurrentScreen('Login');
+        }
+      } else {
+        // Remember me yok - Login ekranına git
+        console.log('[App] No remember me from Settings, redirecting to Login');
+        setCurrentScreen('Login');
+      }
+    } catch (error) {
+      console.error('[App] Error in handleConnectionSuccess:', error);
+      setCurrentScreen('Login');
+    }
   };
 
   if (showSplash) {
@@ -1131,7 +1196,7 @@ function MainApp() {
                 ]}
               />
             </View>
-            <Text style={styles.splashLoadingText}>SYSTEM INITIALIZATION</Text>
+            <Text style={styles.splashLoadingText}>CHECKING SERVER CONNECTION</Text>
           </View>
         </Animated.View>
       </View>

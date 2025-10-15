@@ -527,7 +527,20 @@ class ApiService {
     }
   }
 
-  getCurrentSettings(): ServerSettings | null {
+  async getCurrentSettings(): Promise<ServerSettings | null> {
+    try {
+      const savedSettings = await AsyncStorage.getItem('serverSettings');
+      if (savedSettings) {
+        return JSON.parse(savedSettings);
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting current settings:', error);
+      return null;
+    }
+  }
+
+  getLoadedSettings(): ServerSettings | null {
     return this.settings;
   }
 

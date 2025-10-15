@@ -32,14 +32,10 @@ export function ConnectionProvider({ children }: ConnectionProviderProps) {
   const initializeConnection = async () => {
     try {
       await loadSettings();
-      // Her zaman otomatik bağlan
-      await connect();
+      // Artık otomatik bağlanma, sadece ayarları yükle
+      console.log('[ConnectionContext] Settings loaded, waiting for manual connection');
     } catch (error) {
       console.error('Error initializing connection:', error);
-      // Bağlantı başarısız olursa 5 saniye sonra tekrar dene
-      setTimeout(() => {
-        connect().catch(console.error);
-      }, 5000);
     } finally {
       setIsLoading(false);
     }
@@ -75,6 +71,7 @@ export function ConnectionProvider({ children }: ConnectionProviderProps) {
       if (connectionResult) {
         setIsConnected(true);
         await refreshData();
+        console.log('[ConnectionContext] Connection successful');
         
         // API bağlantısı başarılıysa WebSocket'i de bağla
         try {
@@ -90,23 +87,29 @@ export function ConnectionProvider({ children }: ConnectionProviderProps) {
       } else {
         setIsConnected(false);
         setSystemInfo(null);
+        console.log('[ConnectionContext] Connection failed, will retry in 10 seconds');
         
-        // Bağlantı başarısız olursa 10 saniye sonra tekrar dene
-        setTimeout(() => {
-          console.log('Retrying connection...');
-          connect().catch(console.error);
-        }, 10000);
+        // SADECE ZATEN BAĞLI İKEN KOPMA DURUMUNDA RECONNECT YAP
+        // İlk bağlantı denemesi başarısızsa reconnect yapma
+        if (isConnected) {
+          setTimeout(() => {
+            console.log('[ConnectionContext] Retrying connection after disconnect...');
+            connect().catch(console.error);
+          }, 10000);
+        }
       }
     } catch (error) {
       console.error('Error connecting:', error);
       setIsConnected(false);
       setSystemInfo(null);
       
-      // Hata durumunda da 10 saniye sonra tekrar dene
-      setTimeout(() => {
-        console.log('Retrying connection after error...');
-        connect().catch(console.error);
-      }, 10000);
+      // SADECE ZATEN BAĞLI İKEN HATA OLURSA RECONNECT YAP
+      if (isConnected) {
+        setTimeout(() => {
+          console.log('[ConnectionContext] Retrying connection after error...');
+          connect().catch(console.error);
+        }, 10000);
+      }
     } finally {
       setIsLoading(false);
     }
