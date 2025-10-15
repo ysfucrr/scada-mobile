@@ -32,6 +32,9 @@ import { WebSocketProvider } from './context/WebSocketContext';
 import ApiService from './services/ApiService';
 import AuthService from './services/AuthService';
 
+// Contexts
+import { useConnection } from './context/ConnectionContext';
+
 // Main App component
 export default function AppWrapper() {
   return (
@@ -66,13 +69,13 @@ const PaperProviderWithTheme: React.FC<{ children: React.ReactNode }> = ({ child
 function MainApp() {
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const paperTheme = usePaperTheme();
+  const { isConnected, connect } = useConnection();
   
   const [currentScreen, setCurrentScreen] = useState('Settings');
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [isConnected, setIsConnected] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   
   // Animation values
@@ -350,7 +353,6 @@ function MainApp() {
       // 2. Server ayarları var, bağlantı testi yap
       console.log('[App] Testing server connection...');
       const connected = await ApiService.testConnection();
-      setIsConnected(connected);
       console.log('[App] Connection test result:', connected);
       
       if (!connected) {
@@ -373,12 +375,13 @@ function MainApp() {
         console.log('[App] Auto login result:', autoLoginSuccess);
         
         if (autoLoginSuccess) {
-          // Otomatik login başarılı - direkt Home'a git
+          // Otomatik login başarılı - ConnectionContext'i güncelle ve Home'a git
+          await connect();
           const user = AuthService.getCurrentUser();
           setCurrentUser(user);
           setIsAuthenticated(true);
           setCurrentScreen('Home');
-          console.log('[App] Auto login successful, redirecting to Home');
+          console.log('[App] Auto login successful, connection updated, redirecting to Home');
         } else {
           // Otomatik login başarısız - Login ekranına git
           console.log('[App] Auto login failed, redirecting to Login');
@@ -416,13 +419,16 @@ function MainApp() {
     setCurrentUser(user);
     setIsAuthenticated(true);
     setCurrentScreen('Home');
+    console.log('[App] Login successful, user authenticated');
+    // ConnectionContext zaten LoginScreen'de güncellendi
   };
 
   const handleConnectionSuccess = async () => {
-    setIsConnected(true);
-    
     // Settings'den gelen başarılı bağlantı sonrası remember me kontrolü
     try {
+      await connect();
+      console.log('[App] Connection established from Settings');
+      
       const hasRememberMe = await AuthService.isLoggedIn();
       
       if (hasRememberMe) {

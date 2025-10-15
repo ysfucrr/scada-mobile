@@ -17,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import AuthService from '../services/AuthService';
+import { useConnection } from '../context/ConnectionContext';
 
 const { width } = Dimensions.get('window');
 
@@ -44,6 +45,7 @@ interface LoginScreenProps {
 }
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
+  const { connect } = useConnection();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -57,24 +59,16 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
 
   const checkAutoLogin = async () => {
     try {
-      const isLoggedIn = await AuthService.isLoggedIn();
-      if (isLoggedIn) {
-        const success = await AuthService.simpleAutoLogin();
-        if (success) {
-          if (onLoginSuccess) {
-            onLoginSuccess();
-          }
-          return;
-        }
-      }
-      
+      // Sadece kayıtlı kullanıcı bilgilerini form'a doldur
+      // Otomatik login yapmayı App.tsx'e bırak
       const savedCredentials = await AuthService.getSavedCredentials();
       if (savedCredentials && savedCredentials.username) {
         setUsername(savedCredentials.username);
         setRememberMe(savedCredentials.rememberMe);
+        console.log('[LoginScreen] Loaded saved credentials for form');
       }
     } catch (error) {
-      console.error('Auto login check error:', error);
+      console.error('Error loading saved credentials:', error);
     } finally {
       setIsCheckingAuth(false);
     }
@@ -90,6 +84,10 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
     try {
       const success = await AuthService.simpleLogin(username, password, rememberMe);
       if (success) {
+        // Login başarılı olduktan sonra ConnectionContext'i güncelle
+        await connect();
+        console.log('[LoginScreen] Login successful, connection context updated');
+        
         if (onLoginSuccess) {
           onLoginSuccess();
         }
