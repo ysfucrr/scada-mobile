@@ -1,6 +1,6 @@
-import React, { useRef } from 'react';
-import { StyleSheet, ViewStyle, View, Animated, TouchableWithoutFeedback } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import React, { useRef } from 'react';
+import { Animated, StyleSheet, TouchableWithoutFeedback, View, ViewStyle } from 'react-native';
 import { Card } from 'react-native-paper';
 
 interface GradientCardProps {

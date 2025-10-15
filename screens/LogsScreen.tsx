@@ -1,23 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
+  Alert,
+  Animated,
   FlatList,
   RefreshControl,
-  Alert,
+  StyleSheet,
+  Text,
   TouchableOpacity,
-  Animated
+  View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { useTheme as usePaperTheme } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Components
 import AnalyzerCard from '../components/AnalyzerCard';
-import LogCard from '../components/LogCard';
 import GradientCard from '../components/GradientCard';
+import LogCard from '../components/LogCard';
 
 // Contexts
 import { useConnection } from '../context/ConnectionContext';

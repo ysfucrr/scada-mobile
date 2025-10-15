@@ -1,11 +1,11 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Text, useTheme, Chip, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import { Chip, Text, useTheme } from 'react-native-paper';
+import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { AppTheme } from '../theme/theme';
 import GradientCard from './GradientCard';
-import { useTheme as useAppTheme } from '../context/ThemeContext';
 
 interface RegisterData {
   id: string;

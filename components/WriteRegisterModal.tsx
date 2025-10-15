@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import {
+  Alert,
   Modal,
-  View,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
-  Alert,
+  View,
 } from 'react-native';
-import { RegisterData } from '../services/ApiService';
 import { useWebSocket } from '../context/WebSocketContext';
+import { RegisterData } from '../services/ApiService';
 
 interface WriteRegisterModalProps {
   visible: boolean;

@@ -1,32 +1,28 @@
 
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  TouchableOpacity
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  Surface,
-  TextInput,
-  Switch,
-  Button,
-  Card,
-  useTheme as usePaperTheme,
-  ActivityIndicator,
-  Chip
-} from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import {
+  ActivityIndicator,
+  Card,
+  Chip,
+  Switch,
+  TextInput,
+  useTheme as usePaperTheme
+} from 'react-native-paper';
 import GradientCard from '../components/GradientCard';
-import { useTheme as useAppTheme } from '../context/ThemeContext';
-import ENV from '../config/environment';
-import ApiService, { ServerSettings } from '../services/ApiService';
 import { useConnection } from '../context/ConnectionContext';
+import { useTheme as useAppTheme } from '../context/ThemeContext';
+import ApiService, { ServerSettings } from '../services/ApiService';
 
 interface SettingsScreenProps {
   onConnectionSuccess?: () => void;
@@ -37,7 +33,7 @@ export default function SettingsScreen({ onConnectionSuccess }: SettingsScreenPr
   const { isDarkMode } = useAppTheme();
   const { settings, updateSettings, isConnected, disconnect } = useConnection();
   
-  const [serverHost, setServerHost] = useState('localhost');
+  const [serverHost, setServerHost] = useState('');
   const [autoConnect, setAutoConnect] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 

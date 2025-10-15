@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import ApiService, { SystemInfo, ServerSettings } from '../services/ApiService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import ApiService, { ServerSettings, SystemInfo } from '../services/ApiService';
 
 interface ConnectionContextType {
   isConnected: boolean;
@@ -54,12 +54,11 @@ export function ConnectionProvider({ children }: ConnectionProviderProps) {
       } else {
         // Default settings
         const defaultSettings: ServerSettings = {
-          serverHost: 'localhost',
-          serverPort: '3000',
-          apiPort: '3001',
-          useHttps: false,
-          autoConnect: true,
-        };
+  serverHost: '',
+  serverPort: '443',
+  useHttps: true,
+  autoConnect: false,
+};
         setSettings(defaultSettings);
         await AsyncStorage.setItem('serverSettings', JSON.stringify(defaultSettings));
       }

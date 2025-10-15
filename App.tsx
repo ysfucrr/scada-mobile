@@ -1,34 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Modal, StyleSheet, TouchableOpacity, View, Animated, Dimensions } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Dimensions, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
-  Provider as PaperProvider,
   Appbar,
-  Drawer,
-  Text,
-  useTheme as usePaperTheme,
-  ActivityIndicator,
-  Surface,
   Avatar,
   Divider,
-  List
+  List,
+  Provider as PaperProvider,
+  Surface,
+  Text,
+  useTheme as usePaperTheme
 } from 'react-native-paper';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Screens
 import HomeScreen from './screens/HomeScreen';
-import SettingsScreen from './screens/SettingsScreen';
-import RegistersScreen from './screens/RegistersScreen';
-import LogsScreen from './screens/LogsScreen';
 import LoginScreen from './screens/LoginScreen';
+import LogsScreen from './screens/LogsScreen';
+import RegistersScreen from './screens/RegistersScreen';
+import SettingsScreen from './screens/SettingsScreen';
 
 // Contexts
 import { ConnectionProvider } from './context/ConnectionContext';
-import { WebSocketProvider } from './context/WebSocketContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { WebSocketProvider } from './context/WebSocketContext';
 
 // Services
 import ApiService from './services/ApiService';

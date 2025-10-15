@@ -1,11 +1,11 @@
-import React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
-import { useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import GradientCard from './GradientCard';
-import { AppTheme } from '../theme/theme';
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { useTheme } from 'react-native-paper';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
+import { AppTheme } from '../theme/theme';
+import GradientCard from './GradientCard';
 
 interface AnalyzerStats {
   total: number;

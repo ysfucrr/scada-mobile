@@ -1,30 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import React, { useState } from 'react';
 import {
-  View,
-  StyleSheet,
   FlatList,
   Modal,
   RefreshControl,
+  StyleSheet,
+  Text,
   TouchableOpacity,
-  Alert,
-  Text
+  View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
 import {
+  ActivityIndicator,
   Button,
-  Card,
-  Chip,
+  Dialog,
   Divider,
   IconButton,
-  useTheme,
-  Surface,
-  ActivityIndicator,
-  Dialog,
+  Text as PaperText,
   Portal,
-  Text as PaperText
+  Surface,
+  useTheme
 } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Components
 import LogEntryCard from '../components/LogEntryCard';

@@ -73,11 +73,11 @@ class ApiService {
       } else {
         // Default settings
         this.settings = {
-          serverHost: 'localhost',
-          serverPort: '3000',
-          useHttps: false,
-          autoConnect: true,
-        };
+  serverHost: '',
+  serverPort: '443',
+  useHttps: true,
+  autoConnect: false,
+};
       }
     } catch (error) {
       console.error('Error loading settings:', error);

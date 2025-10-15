@@ -1,30 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, RefreshControl, useWindowDimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import {
-  Surface,
-  Text,
-  useTheme,
-  ActivityIndicator,
-  SegmentedButtons,
-  IconButton,
-  Divider,
-  Card,
-} from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ScrollView } from 'react-native-gesture-handler';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useRef, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  ActivityIndicator,
+  IconButton,
+  SegmentedButtons,
+  Text,
+  useTheme
+} from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Components
-import StatusCard from '../components/StatusCard';
 import DataCard from '../components/DataCard';
-import WidgetCard from '../components/WidgetCard';
 import GradientCard from '../components/GradientCard';
+import StatusCard from '../components/StatusCard';
+import WidgetCard from '../components/WidgetCard';
 
 // Contexts
 import { useConnection } from '../context/ConnectionContext';
-import { useWebSocket } from '../context/WebSocketContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
+import { useWebSocket } from '../context/WebSocketContext';
 
 // Services
 import ApiService from '../services/ApiService';
@@ -85,7 +81,7 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   const paperTheme = useTheme() as AppTheme;
   
   // Screen dimensions
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   
   // States
   const [activeTab, setActiveTab] = useState<'overview' | 'system'>('overview');
@@ -301,227 +297,216 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   };
 
   // Render the Overview tab content
-  const OverviewTabScreen = () => {
-    return (
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {/* When widgets are loading */}
-        {widgetsLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={paperTheme.colors.primary} />
-            <Text variant="bodyLarge" style={styles.loadingText}>Loading widgets...</Text>
-          </View>
-        ) : widgets.length === 0 ? (
-          // When no widgets exist
-          <View style={styles.emptyWidgetsContainer}>
-            <GradientCard
-              colors={isDarkMode ? ['#263238', '#37474F'] : ['#E3F2FD', '#BBDEFB']}
-              style={styles.emptyCard}
-            >
-              <View style={styles.emptyContent}>
-                <MaterialCommunityIcons
-                  name="view-dashboard-outline"
-                  size={80}
-                  color={isDarkMode ? '#64B5F6' : '#1976D2'}
-                />
-                <Text variant="headlineSmall" style={[styles.emptyWidgetsText, { color: isDarkMode ? '#E3F2FD' : '#0D47A1' }]}>
-                  No widgets configured
-                </Text>
-                <Text variant="bodyLarge" style={[styles.emptyWidgetsSubtext, { color: isDarkMode ? '#B3E5FC' : '#01579B' }]}>
-                  Add widgets from the web dashboard to monitor your registers in real-time
-                </Text>
-              </View>
-            </GradientCard>
-          </View>
-        ) : (
-          // Format widgets for display
-          <View style={styles.widgetsContainer}>
-            {widgets.map((widget) => (
-              <WidgetCard
-                key={widget._id}
-                id={widget._id}
-                title={widget.title}
-                registers={
-                  widget.registers && Array.isArray(widget.registers)
-                    ? widget.registers.map((register: any) => {
-                        const realTimeValue = widgetValues.get(register.id);
-                        const displayValue = realTimeValue !== undefined ? realTimeValue : (register.value || 'N/A');
-                        const isLive = realTimeValue !== undefined;
-                        
-                        return {
-                          id: register.id,
-                          label: register.label,
-                          value: displayValue,
-                          scaleUnit: register.scaleUnit,
-                          isLive
-                        };
-                      })
-                    : []
-                }
+  const renderOverviewContent = () => {
+    if (widgetsLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={paperTheme.colors.primary} />
+          <Text variant="bodyLarge" style={styles.loadingText}>Loading widgets...</Text>
+        </View>
+      );
+    }
+
+    if (widgets.length === 0) {
+      return (
+        <View style={styles.emptyWidgetsContainer}>
+          <GradientCard
+            colors={isDarkMode ? ['#263238', '#37474F'] : ['#E3F2FD', '#BBDEFB']}
+            style={styles.emptyCard}
+          >
+            <View style={styles.emptyContent}>
+              <MaterialCommunityIcons
+                name="view-dashboard-outline"
+                size={80}
+                color={isDarkMode ? '#64B5F6' : '#1976D2'}
               />
-            ))}
-          </View>
-        )}
-      </ScrollView>
+              <Text variant="headlineSmall" style={[styles.emptyWidgetsText, { color: isDarkMode ? '#E3F2FD' : '#0D47A1' }]}>
+                No widgets configured
+              </Text>
+              <Text variant="bodyLarge" style={[styles.emptyWidgetsSubtext, { color: isDarkMode ? '#B3E5FC' : '#01579B' }]}>
+                Add widgets from the web dashboard to monitor your registers in real-time
+              </Text>
+            </View>
+          </GradientCard>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.widgetsContainer}>
+        {widgets.map((widget) => (
+          <WidgetCard
+            key={widget._id}
+            id={widget._id}
+            title={widget.title}
+            registers={
+              widget.registers && Array.isArray(widget.registers)
+                ? widget.registers.map((register: any) => {
+                    const realTimeValue = widgetValues.get(register.id);
+                    const displayValue = realTimeValue !== undefined ? realTimeValue : (register.value || 'N/A');
+                    const isLive = realTimeValue !== undefined;
+                    
+                    return {
+                      id: register.id,
+                      label: register.label,
+                      value: displayValue,
+                      scaleUnit: register.scaleUnit,
+                      isLive
+                    };
+                  })
+                : []
+            }
+          />
+        ))}
+      </View>
     );
   };
 
   // Render the System Health tab content
-  const SystemHealthTabScreen = () => {
+  const renderSystemContent = () => {
     return (
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-        }
-      >
-        <View style={styles.systemHealthContainer}>
-          {/* Connection Status Card */}
-          <StatusCard
-            title="Connection Status"
-            status={isConnected}
-            subtitle={`WebSocket: ${wsConnectionState.charAt(0).toUpperCase() + wsConnectionState.slice(1)}`}
-            lastUpdate={lastUpdate}
-            additionalInfo={`Real-time Values: ${registerValues.size} active`}
-          />
-          
-          {/* Refresh Controls */}
-          <View style={styles.refreshControlsWrapper}>
-            <GradientCard
-              colors={isDarkMode ? ['#263238', '#37474F'] : ['#E3F2FD', '#BBDEFB']}
-              style={styles.refreshControlsCard}
-              mode="elevated"
-            >
-              <View style={styles.refreshControlsContent}>
-                <View style={styles.refreshHeader}>
-                  <MaterialCommunityIcons
-                    name="refresh-circle"
-                    size={24}
-                    color={isDarkMode ? '#64B5F6' : '#1976D2'}
-                    style={styles.refreshIcon}
-                  />
-                  <Text variant="titleMedium" style={[styles.refreshTitle, { color: isDarkMode ? '#E3F2FD' : '#0D47A1' }]}>
-                    Auto-refresh Settings
-                  </Text>
-                </View>
-                
-                <View style={styles.segmentedButtonsWrapper}>
-                  <SegmentedButtons
-                    value={refreshInterval.toString()}
-                    onValueChange={value => setRefreshInterval(parseInt(value))}
-                    buttons={[
-                      {
-                        value: '5',
-                        label: '5s',
-                        icon: 'timer-sand',
-                      },
-                      {
-                        value: '10',
-                        label: '10s',
-                        icon: 'timer',
-                      },
-                      {
-                        value: '30',
-                        label: '30s',
-                        icon: 'timer-outline',
-                      },
-                    ]}
-                    style={[
-                      styles.segmentedButtons,
-                      { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }
-                    ]}
-                    density="regular"
-                  />
-                </View>
-                
-                <View style={styles.lastUpdateContainer}>
-                  <MaterialCommunityIcons
-                    name="clock-check-outline"
-                    size={16}
-                    color={isDarkMode ? '#90CAF9' : '#1565C0'}
-                    style={styles.clockIcon}
-                  />
-                  <Text variant="bodySmall" style={[styles.lastUpdateText, { color: isDarkMode ? '#B3E5FC' : '#01579B' }]}>
-                    Last update: {lastUpdate}
-                  </Text>
-                </View>
+      <View style={styles.systemHealthContainer}>
+        {/* Connection Status Card */}
+        <StatusCard
+          title="Connection Status"
+          status={isConnected}
+          subtitle={`WebSocket: ${wsConnectionState.charAt(0).toUpperCase() + wsConnectionState.slice(1)}`}
+          lastUpdate={lastUpdate}
+          additionalInfo={`Real-time Values: ${registerValues.size} active`}
+        />
+        
+        {/* Refresh Controls */}
+        <View style={styles.refreshControlsWrapper}>
+          <GradientCard
+            colors={isDarkMode ? ['#263238', '#37474F'] : ['#E3F2FD', '#BBDEFB']}
+            style={styles.refreshControlsCard}
+            mode="elevated"
+          >
+            <View style={styles.refreshControlsContent}>
+              <View style={styles.refreshHeader}>
+                <MaterialCommunityIcons
+                  name="refresh-circle"
+                  size={24}
+                  color={isDarkMode ? '#64B5F6' : '#1976D2'}
+                  style={styles.refreshIcon}
+                />
+                <Text variant="titleMedium" style={[styles.refreshTitle, { color: isDarkMode ? '#E3F2FD' : '#0D47A1' }]}>
+                  Auto-refresh Settings
+                </Text>
               </View>
-            </GradientCard>
-          </View>
-
-          {/* System Overview Card */}
-          <DataCard 
-            title="System Overview"
-            data={systemInfo?.system 
-              ? [
-                  { id: 'platform', label: 'Platform', value: systemInfo.system.platform },
-                  { id: 'hostname', label: 'Hostname', value: systemInfo.system.hostname },
-                  { id: 'cpu', label: 'CPU Cores', value: systemInfo.system.cpuCount },
-                  { id: 'uptime', label: 'Uptime', value: formatUptime(systemInfo.system.uptime) },
-                ]
-              : []}
-            icon="server"
-            onRefresh={() => loadSystemInfo()}
-            isLoading={isRefreshing}
-          />
-
-          {/* Memory Usage Card */}
-          <DataCard
-            title="Memory Usage"
-            data={systemInfo?.system
-              ? [
-                  { id: 'total', label: 'Total Memory', value: systemInfo.system.totalMemory, unit: 'GB' },
-                  { id: 'used', label: 'Used Memory', value: systemInfo.system.usedMemory, unit: 'GB' },
-                  { id: 'free', label: 'Free Memory', value: systemInfo.system.freeMemory, unit: 'GB' },
-                  { id: 'usage', label: 'Usage', value: systemInfo.system.memoryUsagePercent, unit: '%' },
-                ]
-              : []}
-            icon="memory"
-            onRefresh={() => loadSystemInfo()}
-            isLoading={isRefreshing}
-            gradientColors={['#9C27B0', '#BA68C8']}
-          />
-
-          {/* MongoDB Overview Card */}
-          <DataCard
-            title="MongoDB Overview"
-            data={systemInfo?.mongodb?.dbStats
-              ? [
-                  { id: 'db', label: 'Database', value: systemInfo.mongodb.dbStats.db },
-                  { id: 'collections', label: 'Collections', value: systemInfo.mongodb.dbStats.collections },
-                  { id: 'documents', label: 'Documents', value: systemInfo.mongodb.dbStats.objects.toLocaleString() },
-                  { id: 'size', label: 'Data Size', value: formatBytes(systemInfo.mongodb.dbStats.dataSize * 1024 * 1024) },
-                ]
-              : []}
-            icon="database"
-            onRefresh={() => loadSystemInfo()}
-            isLoading={isRefreshing}
-            gradientColors={['#FF6F00', '#FFA726']}
-          />
-
-          {/* Top Collections Card */}
-          {systemInfo?.mongodb?.collectionStats && systemInfo.mongodb.collectionStats.length > 0 && (
-            <DataCard
-              title="Top Collections"
-              data={systemInfo.mongodb.collectionStats
-                .sort((a, b) => b.count - a.count)
-                .slice(0, 5)
-                .map(collection => ({
-                  id: collection.name,
-                  label: collection.name,
-                  value: collection.count.toLocaleString(),
-                  unit: `(${formatBytes(collection.size * 1024 * 1024)})`
-                }))}
-              icon="folder-multiple"
-              gradientColors={['#00BCD4', '#4DD0E1']}
-            />
-          )}
+              
+              <View style={styles.segmentedButtonsWrapper}>
+                <SegmentedButtons
+                  value={refreshInterval.toString()}
+                  onValueChange={value => setRefreshInterval(parseInt(value))}
+                  buttons={[
+                    {
+                      value: '5',
+                      label: '5s',
+                      icon: 'timer-sand',
+                    },
+                    {
+                      value: '10',
+                      label: '10s',
+                      icon: 'timer',
+                    },
+                    {
+                      value: '30',
+                      label: '30s',
+                      icon: 'timer-outline',
+                    },
+                  ]}
+                  style={[
+                    styles.segmentedButtons,
+                    { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }
+                  ]}
+                  density="regular"
+                />
+              </View>
+              
+              <View style={styles.lastUpdateContainer}>
+                <MaterialCommunityIcons
+                  name="clock-check-outline"
+                  size={16}
+                  color={isDarkMode ? '#90CAF9' : '#1565C0'}
+                  style={styles.clockIcon}
+                />
+                <Text variant="bodySmall" style={[styles.lastUpdateText, { color: isDarkMode ? '#B3E5FC' : '#01579B' }]}>
+                  Last update: {lastUpdate}
+                </Text>
+              </View>
+            </View>
+          </GradientCard>
         </View>
-      </ScrollView>
+
+        {/* System Overview Card */}
+        <DataCard
+          title="System Overview"
+          data={systemInfo?.system
+            ? [
+                { id: 'platform', label: 'Platform', value: systemInfo.system.platform },
+                { id: 'hostname', label: 'Hostname', value: systemInfo.system.hostname },
+                { id: 'cpu', label: 'CPU Cores', value: systemInfo.system.cpuCount },
+                { id: 'uptime', label: 'Uptime', value: formatUptime(systemInfo.system.uptime) },
+              ]
+            : []}
+          icon="server"
+          onRefresh={() => loadSystemInfo()}
+          isLoading={isRefreshing}
+        />
+
+        {/* Memory Usage Card */}
+        <DataCard
+          title="Memory Usage"
+          data={systemInfo?.system
+            ? [
+                { id: 'total', label: 'Total Memory', value: systemInfo.system.totalMemory, unit: 'GB' },
+                { id: 'used', label: 'Used Memory', value: systemInfo.system.usedMemory, unit: 'GB' },
+                { id: 'free', label: 'Free Memory', value: systemInfo.system.freeMemory, unit: 'GB' },
+                { id: 'usage', label: 'Usage', value: systemInfo.system.memoryUsagePercent, unit: '%' },
+              ]
+            : []}
+          icon="memory"
+          onRefresh={() => loadSystemInfo()}
+          isLoading={isRefreshing}
+          gradientColors={['#9C27B0', '#BA68C8']}
+        />
+
+        {/* MongoDB Overview Card */}
+        <DataCard
+          title="MongoDB Overview"
+          data={systemInfo?.mongodb?.dbStats
+            ? [
+                { id: 'db', label: 'Database', value: systemInfo.mongodb.dbStats.db },
+                { id: 'collections', label: 'Collections', value: systemInfo.mongodb.dbStats.collections },
+                { id: 'documents', label: 'Documents', value: systemInfo.mongodb.dbStats.objects.toLocaleString() },
+                { id: 'size', label: 'Data Size', value: formatBytes(systemInfo.mongodb.dbStats.dataSize * 1024 * 1024) },
+              ]
+            : []}
+          icon="database"
+          onRefresh={() => loadSystemInfo()}
+          isLoading={isRefreshing}
+          gradientColors={['#FF6F00', '#FFA726']}
+        />
+
+        {/* Top Collections Card */}
+        {systemInfo?.mongodb?.collectionStats && systemInfo.mongodb.collectionStats.length > 0 && (
+          <DataCard
+            title="Top Collections"
+            data={systemInfo.mongodb.collectionStats
+              .sort((a, b) => b.count - a.count)
+              .slice(0, 5)
+              .map(collection => ({
+                id: collection.name,
+                label: collection.name,
+                value: collection.count.toLocaleString(),
+                unit: `(${formatBytes(collection.size * 1024 * 1024)})`
+              }))}
+            icon="folder-multiple"
+            gradientColors={['#00BCD4', '#4DD0E1']}
+          />
+        )}
+      </View>
     );
   };
   
@@ -531,8 +516,8 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
       <StatusBar style={isDarkMode ? "light" : "dark"} />
 
       <View style={styles.tabContainer}>
-        <IconButton 
-          icon="view-dashboard-outline" 
+        <IconButton
+          icon="view-dashboard-outline"
           iconColor={activeTab === 'overview' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant}
           size={24}
           onPress={() => setActiveTab('overview')}
@@ -549,8 +534,8 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
 
         <View style={styles.tabSpacer} />
 
-        <IconButton 
-          icon="server" 
+        <IconButton
+          icon="server"
           iconColor={activeTab === 'system' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant}
           size={24}
           onPress={() => setActiveTab('system')}
@@ -566,8 +551,17 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
         </Text>
       </View>
 
-      {/* Tab content */}
-      {activeTab === 'overview' ? <OverviewTabScreen /> : <SystemHealthTabScreen />}
+      {/* Tab content with simple ScrollView */}
+      <ScrollView
+        style={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+        }
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={false}
+      >
+        {activeTab === 'overview' ? renderOverviewContent() : renderSystemContent()}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -576,9 +570,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 20,
+  scrollContainer: {
+    flex: 1,
   },
   tabContainer: {
     flexDirection: 'row',
@@ -603,6 +596,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 40,
+    minHeight: 300,
   },
   loadingText: {
     marginTop: 10,
@@ -611,12 +605,12 @@ const styles = StyleSheet.create({
   widgetsContainer: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 8,
+    paddingBottom: 100,
   },
   emptyWidgetsContainer: {
-    flex: 1,
     padding: 16,
     justifyContent: 'center',
+    minHeight: 400,
   },
   emptyCard: {
     elevation: 4,
@@ -638,6 +632,7 @@ const styles = StyleSheet.create({
   },
   systemHealthContainer: {
     padding: 16,
+    paddingBottom: 100,
   },
   refreshControlsWrapper: {
     marginBottom: 16,
@@ -685,36 +680,5 @@ const styles = StyleSheet.create({
   },
   lastUpdateText: {
     fontWeight: '500',
-  },
-  widgetCard: {
-    marginBottom: 16,
-    borderRadius: 12,
-  },
-  widgetTitle: {
-    fontWeight: '600',
-  },
-  registersContainer: {
-    marginTop: 8,
-  },
-  registerItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
-  },
-  registerLabel: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  registerValue: {
-    fontWeight: '600',
-    textAlign: 'right',
-  },
-  noRegistersText: {
-    textAlign: 'center',
-    padding: 16,
-    opacity: 0.6,
   },
 });

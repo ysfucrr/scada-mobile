@@ -1,25 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
-  Alert,
-  Animated
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { useConnection } from '../context/ConnectionContext';
-import { useWebSocket } from '../context/WebSocketContext';
-import ApiService, { RegisterData } from '../services/ApiService';
-import WriteRegisterModal from '../components/WriteRegisterModal';
-import { useTheme as usePaperTheme, Card, Surface, Divider, Badge, Button, Chip, IconButton } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { Card, IconButton, useTheme as usePaperTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientCard from '../components/GradientCard';
+import WriteRegisterModal from '../components/WriteRegisterModal';
+import { useConnection } from '../context/ConnectionContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
+import { useWebSocket } from '../context/WebSocketContext';
+import ApiService, { RegisterData } from '../services/ApiService';
 
 interface RegistersScreenProps {
   isActive?: boolean;

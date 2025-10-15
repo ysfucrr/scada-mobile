@@ -1,5 +1,5 @@
-import { MD3LightTheme, MD3DarkTheme, configureFonts } from 'react-native-paper';
-import { DefaultTheme as NavigationLightTheme, DarkTheme as NavigationDarkTheme } from '@react-navigation/native';
+import { DarkTheme as NavigationDarkTheme, DefaultTheme as NavigationLightTheme } from '@react-navigation/native';
+import { MD3DarkTheme, MD3LightTheme, configureFonts } from 'react-native-paper';
 
 // Brand color: #1E88E5 (Blue 600 in Material palette)
 const primaryColor = '#1E88E5';

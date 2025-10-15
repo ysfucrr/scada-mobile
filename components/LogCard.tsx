@@ -1,9 +1,9 @@
-import React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
-import { Card, useTheme, IconButton, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { AppTheme } from '../theme/theme';
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { Card, Chip, IconButton, useTheme } from 'react-native-paper';
 import { TrendLogData } from '../screens/LogsScreen';
+import { AppTheme } from '../theme/theme';
 
 interface LogCardProps {
   log: TrendLogData;
