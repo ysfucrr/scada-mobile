@@ -5,6 +5,7 @@ interface LoginCredentials {
   username: string;
   password: string;
   rememberMe: boolean;
+  agentId?: string; // Seçili agent ID'si
 }
 
 interface User {
@@ -16,6 +17,7 @@ interface User {
 class AuthService {
   private static instance: AuthService;
   private currentUser: User | null = null;
+  private selectedAgentId: string | null = null; // Seçili agent ID'si
 
   private constructor() {}
 
@@ -36,12 +38,23 @@ class AuthService {
 
       if (response.success && response.user) {
         this.currentUser = response.user;
+        
+        // Agent ID varsa kaydet
+        if (credentials.agentId) {
+          this.selectedAgentId = credentials.agentId;
+          await AsyncStorage.setItem('selectedAgentId', credentials.agentId);
+        }
 
         // Beni hatırla seçildiyse kullanıcı bilgilerini kaydet
         if (credentials.rememberMe) {
           await AsyncStorage.setItem('savedUsername', credentials.username);
           await AsyncStorage.setItem('savedPassword', credentials.password);
           await AsyncStorage.setItem('rememberMe', 'true');
+          
+          // Agent ID'yi de sakla
+          if (credentials.agentId) {
+            await AsyncStorage.setItem('savedAgentId', credentials.agentId);
+          }
         } else {
           // Beni hatırla seçili değilse temizle
           await this.clearSavedCredentials();
@@ -70,6 +83,7 @@ class AuthService {
 
       const savedUsername = await AsyncStorage.getItem('savedUsername');
       const savedPassword = await AsyncStorage.getItem('savedPassword');
+      const savedAgentId = await AsyncStorage.getItem('savedAgentId');
 
       if (!savedUsername || !savedPassword) {
         return { success: false, message: 'No saved credentials' };
@@ -90,7 +104,8 @@ class AuthService {
       return await this.login({
         username: savedUsername,
         password: savedPassword,
-        rememberMe: true
+        rememberMe: true,
+        agentId: savedAgentId || undefined
       });
     } catch (error) {
       console.error('Auto login error:', error);
@@ -101,6 +116,11 @@ class AuthService {
   // Logout
   async logout(): Promise<void> {
     this.currentUser = null;
+    this.selectedAgentId = null;
+    
+    // Geçerli agent seçimini kaldır
+    await AsyncStorage.removeItem('selectedAgentId');
+    
     // Sadece oturum bilgisini temizle, beni hatırla bilgilerini koru
     // Böylece kullanıcı tekrar giriş yapmak istediğinde bilgileri dolu gelir
   }
@@ -109,17 +129,20 @@ class AuthService {
   async clearSavedCredentials(): Promise<void> {
     await AsyncStorage.removeItem('savedUsername');
     await AsyncStorage.removeItem('savedPassword');
+    await AsyncStorage.removeItem('savedAgentId');
     await AsyncStorage.removeItem('rememberMe');
   }
 
   // Kayıtlı kullanıcı bilgilerini getir (login formunu doldurmak için)
-  async getSavedCredentials(): Promise<{ username?: string; rememberMe: boolean }> {
+  async getSavedCredentials(): Promise<{ username?: string; agentId?: string; rememberMe: boolean }> {
     try {
       const savedUsername = await AsyncStorage.getItem('savedUsername');
+      const savedAgentId = await AsyncStorage.getItem('savedAgentId');
       const rememberMe = await AsyncStorage.getItem('rememberMe') === 'true';
       
       return {
         username: savedUsername || undefined,
+        agentId: savedAgentId || undefined,
         rememberMe
       };
     } catch (error) {
@@ -131,6 +154,22 @@ class AuthService {
   // Mevcut kullanıcıyı getir
   getCurrentUser(): User | null {
     return this.currentUser;
+  }
+  
+  // Seçili agent ID'sini getir
+  getSelectedAgentId(): string | null {
+    return this.selectedAgentId;
+  }
+  
+  // Agent ID'sini ayarla
+  async setSelectedAgentId(agentId: string | null): Promise<void> {
+    this.selectedAgentId = agentId;
+    
+    if (agentId) {
+      await AsyncStorage.setItem('selectedAgentId', agentId);
+    } else {
+      await AsyncStorage.removeItem('selectedAgentId');
+    }
   }
 
   // Kullanıcının yetkisi var mı kontrol et
@@ -159,8 +198,8 @@ class AuthService {
   }
 
   // Basitleştirilmiş login metodu (LoginScreen için)
-  async simpleLogin(username: string, password: string, rememberMe: boolean): Promise<boolean> {
-    const result = await this.login({ username, password, rememberMe });
+  async simpleLogin(username: string, password: string, rememberMe: boolean, agentId?: string): Promise<boolean> {
+    const result = await this.login({ username, password, rememberMe, agentId });
     return result.success;
   }
 

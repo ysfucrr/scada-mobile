@@ -55,8 +55,19 @@ class ApiService {
   private apiUrl: string = '';
   private settings: ServerSettings | null = null;
   private useCloudBridge: boolean = false;
-
+  private selectedAgentId: string | null = null;
+ 
   async initialize() {
+    // Load selected agent ID from storage
+    try {
+      const agentId = await AsyncStorage.getItem('selectedAgentId');
+      if (agentId) {
+        this.selectedAgentId = agentId;
+        console.log(`[ApiService] Loaded selected agent ID: ${agentId}`);
+      }
+    } catch (error) {
+      console.error('[ApiService] Error loading agent ID:', error);
+    }
     await this.loadSettings();
     this.updateUrls();
     
@@ -100,6 +111,23 @@ class ApiService {
     }
   }
 
+  // Update the selected agent ID
+  async setSelectedAgentId(agentId: string | null) {
+    this.selectedAgentId = agentId;
+    console.log(`[ApiService] Set selected agent ID to: ${agentId}`);
+    
+    if (agentId) {
+      await AsyncStorage.setItem('selectedAgentId', agentId);
+    } else {
+      await AsyncStorage.removeItem('selectedAgentId');
+    }
+  }
+  
+  // Get the current selected agent ID
+  getSelectedAgentId(): string | null {
+    return this.selectedAgentId;
+  }
+
   // Cloud Bridge üzerinden veri çekmek için yeni metod
   async fetchViaCloudBridge(path: string, method = 'GET', body?: any) {
     try {
@@ -112,12 +140,14 @@ class ApiService {
       const url = `${protocol}://${this.settings?.serverHost}:${this.settings?.serverPort}/api/proxy`;
       
       // Cloud Bridge formatında istek gövdesi oluştur
-      // Path zaten /api/mobile prefix'i içeriyor olabilir, kontrol et
-      const fullPath = path.startsWith('/api/mobile') ? path : `/api/mobile${path}`;
+      // Normalize the path - don't add /api/mobile prefix to paths that already have it
+      const fullPath = path.startsWith('/api/') ? path : `/api/mobile${path}`;
       const requestBody = {
         method,
         path: fullPath,
-        body: body || {}
+        body: body || {},
+        // Include agent ID if available and relevant (for authentication and data requests)
+        agentId: this.selectedAgentId
       };
       
       console.log(`Cloud Bridge proxy request to: ${url}`, requestBody);
@@ -518,13 +548,22 @@ class ApiService {
     // Cloud Bridge her zaman WSS (WebSocket Secure) kullanır
     const protocol = this.useCloudBridge ? 'wss' : (this.settings.useHttps ? 'wss' : 'ws');
     
+    // Add agent ID as query parameter if available
+    let url = '';
     if (this.useCloudBridge || !this.settings.apiPort) {
       // Cloud Bridge için Socket.IO server HTTPS portu ile aynı olmalı
-      return `${protocol}://${this.settings.serverHost}:${this.settings.serverPort}`;
+      url = `${protocol}://${this.settings.serverHost}:${this.settings.serverPort}`;
     } else {
       // Normal SCADA WebSocket bağlantısı
-      return `${protocol}://${this.settings.serverHost}:${this.settings.apiPort}`;
+      url = `${protocol}://${this.settings.serverHost}:${this.settings.apiPort}`;
     }
+    
+    // Include agent ID as query parameter if available
+    if (this.selectedAgentId) {
+      url += `?agentId=${encodeURIComponent(this.selectedAgentId)}`;
+    }
+    
+    return url;
   }
 
   async getCurrentSettings(): Promise<ServerSettings | null> {
@@ -578,6 +617,65 @@ class ApiService {
       return data.widgets;
     } catch (error) {
       console.error('Error fetching widgets:', error);
+      return [];
+    }
+  }
+
+  // Fetch available agents from the server
+  async getAvailableAgents(): Promise<any[]> {
+    try {
+      await this.initialize();
+      
+      if (this.useCloudBridge) {
+        // Cloud Bridge - access agents endpoint directly, not through the proxy
+        // This is a server endpoint, not an agent endpoint
+        const url = `${this.baseUrl}/api/mobile/agents`;
+        
+        console.log(`[ApiService] Fetching agents directly from: ${url}`);
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result && result.agents && Array.isArray(result.agents)) {
+          console.log(`[ApiService] Retrieved ${result.agents.length} available agents`);
+          return result.agents;
+        } else {
+          console.warn('[ApiService] Invalid agents response format:', result);
+          return [];
+        }
+      } else {
+        // Direct API endpoint for standalone mode
+        const response = await fetch(`${this.baseUrl}/api/mobile/agents`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        if (data && data.agents && Array.isArray(data.agents)) {
+          return data.agents;
+        } else {
+          return [];
+        }
+      }
+    } catch (error) {
+      console.error('[ApiService] Error fetching available agents:', error);
       return [];
     }
   }
