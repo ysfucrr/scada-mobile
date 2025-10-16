@@ -34,7 +34,10 @@ interface WebSocketContextType {
   unwatchRegister: (register: RegisterSubscription, callback: (value: any) => void) => void;
   writeRegister: (registerId: string, value: number) => Promise<any>;
   connect: () => Promise<void>;
-  disconnect: () => void;
+  disconnect: () => Promise<void>;
+  resetConnection: () => Promise<void>;
+  selectAgent: (agentId: string, agentName?: string) => Promise<boolean>; // New method for agent selection
+  clearAllRegisterValues: () => void; // New method to clear register values
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -82,10 +85,35 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const socketRef = useRef<Socket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
-  // Uygulama başlatıldığında otomatik bağlan
+  // Uygulama başlatıldığında otomatik bağlan ve reset kontrolü yap
   useEffect(() => {
     const initializeWebSocket = async () => {
       try {
+        // Check if there was a reset request
+        const resetRequest = await AsyncStorage.getItem('ws_connection_reset_request');
+        
+        if (resetRequest === 'true') {
+          console.log('[SocketIO] Reset request detected, clearing all data and reconnecting');
+          
+          // Clear the request flag
+          await AsyncStorage.removeItem('ws_connection_reset_request');
+          
+          // Clear all register values and reset state
+          await AsyncStorage.removeItem(REGISTER_CACHE_KEY);
+          setRegisterValues(new Map());
+          listenerMapRef.current.clear();
+          
+          // Force disconnect if already connected
+          if (socketRef.current) {
+            socketRef.current.disconnect();
+            socketRef.current = null;
+            setSocket(null);
+            
+            // Don't clear listenerMapRef.current here anymore
+            // We'll preserve it for the reconnection
+          }
+        }
+        
         await new Promise(resolve => setTimeout(resolve, 2000)); // API bağlantısının kurulmasını bekle
         await connect();
       } catch (error) {
@@ -95,10 +123,71 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
     initializeWebSocket();
 
+    // Set up a listener for agent changes
+    const checkForAgentChanges = async () => {
+      try {
+        const intervalId = setInterval(async () => {
+          const agentChanged = await AsyncStorage.getItem('agent_changed_event');
+          if (agentChanged) {
+            const timestamp = parseInt(agentChanged);
+            const now = Date.now();
+            // Only reset if the change was recent (last 10 seconds)
+            if (now - timestamp < 10000) {
+              console.log('[SocketIO] Agent change detected, reconnecting WebSocket');
+              
+              // Store the current subscriptions before disconnecting
+              const currentSubscriptions = new Map(listenerMapRef.current);
+              console.log(`[SocketIO] Preserving ${currentSubscriptions.size} subscriptions before reconnect`);
+              
+              // Clean up the agent change marker
+              await AsyncStorage.removeItem('agent_changed_event');
+              
+              // Disconnect from current socket
+              await disconnect();
+              
+              // Small delay to ensure disconnect completes
+              await new Promise(resolve => setTimeout(resolve, 300));
+              
+              // Reconnect with the new agent ID
+              await connect();
+              
+              // After reconnection, restore subscriptions with the new agent
+              if (socketRef.current && socketRef.current.connected) {
+                console.log(`[SocketIO] Restoring ${currentSubscriptions.size} watch subscriptions with new agent`);
+                
+                // First reestablish the listener map
+                listenerMapRef.current = currentSubscriptions;
+                
+                // Then send watch requests to the new agent for each subscription
+                for (const [key, data] of currentSubscriptions.entries()) {
+                  if (data.callbacks.length > 0) {
+                    console.log(`[SocketIO] Re-subscribing to: ${key} with new agent`);
+                    socketRef.current.emit('watch-register', data.register);
+                  }
+                }
+              }
+            }
+          }
+        }, 5000);
+        
+        return () => clearInterval(intervalId);
+      } catch (error) {
+        console.error('Error checking for agent changes:', error);
+        return () => {};
+      }
+    };
+
+    const cleanupPromise = checkForAgentChanges();
+
     return () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      cleanupPromise.then(cleanupFn => {
+        if (typeof cleanupFn === 'function') {
+          cleanupFn();
+        }
+      });
     };
   }, []);
 
@@ -122,6 +211,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         throw new Error('No server settings found');
       }
 
+      // Önce tüm register değerlerini temizle
+      await AsyncStorage.removeItem(REGISTER_CACHE_KEY);
+      
+      // Register values map'ini sıfırla
+      setRegisterValues(new Map());
+      
+      // ÖNEMLİ: Abonelikler korunacak, aşağıda yeniden kullanılacak
+      // Bu satırı kaldırdık: listenerMapRef.current.clear();
+      // Böylece agent değiştiğinde abonelikler kaybolmaz
+
       const settings: ServerSettings = JSON.parse(savedSettings);
       // Cloud Bridge (port 443) her zaman HTTPS/WSS kullanır
       const isCloudBridge = settings.serverPort === '443';
@@ -130,6 +229,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       const socketURL = `${httpProtocol}://${settings.serverHost}:${settings.serverPort}`;
       console.log(`[SocketIO] Connecting to: ${socketURL}`);
       setConnectionState('connecting');
+
+      // Seçili agent ID'sini al
+      const selectedAgentId = await AsyncStorage.getItem('selectedAgentId');
+      console.log(`[SocketIO] Connecting with selected agent ID: ${selectedAgentId || 'none'}`);
 
       const newSocket = io(socketURL, {
         transports: ['websocket', 'polling'],
@@ -140,20 +243,55 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         forceNew: true,
         query: {
           type: 'mobile', // Mobil uygulama olduğunu belirt
-          clientId: 'mobile-app-' + Date.now() // Benzersiz bir istemci ID'si oluştur
+          clientId: 'mobile-app-' + Date.now(), // Benzersiz bir istemci ID'si oluştur
+          agentId: selectedAgentId || undefined // Seçili agent ID'si
         }
       });
 
-      newSocket.on('connect', () => {
+      newSocket.on('connect', async () => {
         console.log('[SocketIO] Connected to mobile');
         setIsConnected(true);
         setConnectionState('connected');
         
-        // Mevcut abonelikleri yeniden gönder
+        // Mevcut abonelikleri yeniden gönder - agent ID'yi açıkça belirterek
+        const agentId = await AsyncStorage.getItem('selectedAgentId');
+        console.log(`[SocketIO] Connected with agent ID: ${agentId || 'none'}, restoring subscriptions`);
+        
+        // Eğer seçili bir agent ID varsa, socket üzerinden select-agent olayını gönder
+        if (agentId) {
+          console.log(`[SocketIO] Sending explicit agent selection: ${agentId}`);
+          newSocket.emit('select-agent', { agentId });
+          
+          // Yanıtı bekle
+          const selectionResult = await new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+              console.warn('[SocketIO] Agent selection timed out');
+              resolve({ success: false });
+            }, 2000);
+            
+            newSocket.once('agent-selected', (response) => {
+              clearTimeout(timeout);
+              console.log(`[SocketIO] Agent selection response:`, response);
+              resolve(response);
+            });
+          });
+          
+          console.log(`[SocketIO] Agent selection result:`, selectionResult);
+        }
+        
+        // Kısa bir bekle - server'ın bağlantıyı tamamen kabul etmesi için
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Tüm abonelikleri yeniden gönder
         for (const [key, data] of listenerMapRef.current.entries()) {
           if (data.callbacks.length > 0) {
-            console.log(`[SocketIO] Resubscribing to: ${key}`);
-            newSocket.emit('watch-register', data.register);
+            console.log(`[SocketIO] Resubscribing to: ${key} with agent: ${agentId || 'default'}`);
+            // Explicit watch request with the register information
+            newSocket.emit('watch-register', {
+              ...data.register,
+              // Force including the current agent ID if needed
+              _agentId: agentId // This is just for logging, doesn't affect routing
+            });
           }
         }
       });
@@ -211,6 +349,75 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       throw error;
     }
   }, []);
+  
+  // Agent seçimini belirtmek için yeni bir metod
+  const selectAgent = useCallback(async (agentId: string, agentName?: string): Promise<boolean> => {
+    try {
+      console.log(`[SocketIO] Selecting agent: ${agentId} (${agentName || 'Unknown'})`);
+      
+      // Agent ID'sini AsyncStorage'a kaydet
+      await AsyncStorage.setItem('selectedAgentId', agentId);
+      
+      // Agent adını da kaydedelim
+      if (agentName) {
+        await AsyncStorage.setItem('selectedAgentName', agentName);
+      }
+      
+      // Eğer socket bağlıysa, select-agent olayını gönder
+      if (socketRef.current && socketRef.current.connected) {
+        console.log(`[SocketIO] Sending select-agent event to server for: ${agentId}`);
+        
+        // Server'a select-agent isteği gönder ve yanıtı bekle
+        const result = await new Promise<{success: boolean, error?: string}>((resolve) => {
+          const timeout = setTimeout(() => {
+            console.warn('[SocketIO] Agent selection timed out');
+            resolve({ success: false, error: 'Timeout' });
+          }, 2000);
+          
+          socketRef.current!.emit('select-agent', { agentId });
+          
+          socketRef.current!.once('agent-selected', (response) => {
+            clearTimeout(timeout);
+            console.log(`[SocketIO] Agent selection response:`, response);
+            resolve(response);
+          });
+        });
+        
+        // Seçim başarısızsa, durumu bildir
+        if (!result.success) {
+          console.error(`[SocketIO] Agent selection failed: ${result.error || 'Unknown error'}`);
+          return false;
+        }
+        
+        // Agent değişikliğini bildir - bu WebSocketContext'in yeniden bağlanmasını sağlar
+        await AsyncStorage.setItem('agent_changed_event', Date.now().toString());
+        
+        // Tüm register değerlerini temizle
+        clearAllRegisterValues();
+        
+        console.log(`[SocketIO] Agent selected successfully: ${agentId}`);
+        return true;
+      } else {
+        console.log(`[SocketIO] Socket not connected, saving agent selection for later: ${agentId}`);
+        
+        // Socket bağlı değilse, sadece agent_changed_event'i kaydet - bağlandığında kontrol edilecek
+        await AsyncStorage.setItem('agent_changed_event', Date.now().toString());
+        return true; // Şimdilik başarılı sayalım, bağlanınca işlenecek
+      }
+    } catch (error) {
+      console.error('Error selecting agent:', error);
+      return false;
+    }
+  }, []);
+  
+  // Tüm register değerlerini temizle
+  const clearAllRegisterValues = useCallback(() => {
+    console.log('[SocketIO] Clearing all register values');
+    setRegisterValues(new Map());
+    AsyncStorage.removeItem(REGISTER_CACHE_KEY).catch(err => {
+      console.error('[SocketIO] Error clearing register cache:', err);
+    });
+  }, []);
 
   const scheduleReconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -227,10 +434,13 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     }, 15000) as any; // 15 saniye bekle
   }, []);
 
-  const disconnect = useCallback(() => {
+  // Bağlantıyı kapat ve tüm verileri temizle
+  const disconnect = useCallback(async () => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
+    
+    // Socket bağlantısını kapat
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
@@ -238,6 +448,20 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       setIsConnected(false);
       setConnectionState('disconnected');
     }
+
+    // Tüm register değerlerini temizle
+    await AsyncStorage.removeItem(REGISTER_CACHE_KEY);
+    
+    // Register values map'ini sıfırla
+    setRegisterValues(new Map());
+    
+    // Listener map'i temizle
+    listenerMapRef.current.clear();
+    
+    // We're not clearing the listener map here anymore, just the values cache
+    // listenerMapRef.current will be preserved or reset by the caller as needed
+    
+    console.log('[SocketIO] Disconnected and register values cleared, subscriptions preserved');
   }, []);
 
   const watchRegister = useCallback(async (register: RegisterSubscription, callback: (value: any) => void) => {
@@ -263,6 +487,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         console.log(`[SocketIO] Sending new watch request for: ${key}`);
         socketRef.current.emit('watch-register', register);
         console.log(`[SocketIO] Details of register being watched: ${JSON.stringify(register)}`);
+      } else {
+        console.log(`[SocketIO] Socket not connected, queuing watch for: ${key} until connection`);
+        // Still add to listener map, it will be sent when connection is established
       }
     }
   }, []);
@@ -334,6 +561,29 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     }
   }, []);
 
+  // Tüm register verilerini ve bağlantıyı sıfırla
+  const resetConnection = useCallback(async () => {
+    console.log('[SocketIO] Resetting connection and clearing all data');
+    
+    // Store the current subscriptions before disconnecting
+    const currentSubscriptions = new Map(listenerMapRef.current);
+    console.log(`[SocketIO] Preserving ${currentSubscriptions.size} subscriptions before reset`);
+    
+    // Disconnect and clear data
+    await disconnect();
+    
+    // Small delay to ensure disconnect completes
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Reset the listener map to the stored subscriptions
+    listenerMapRef.current = currentSubscriptions;
+    
+    // Reconnect with the new agent ID
+    await connect();
+    
+    console.log('[SocketIO] Connection reset complete with new agent');
+  }, [connect, disconnect]);
+
   const value: WebSocketContextType = {
     socket,
     connectionState,
@@ -344,6 +594,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     writeRegister,
     connect,
     disconnect,
+    resetConnection,
+    selectAgent,
+    clearAllRegisterValues,
   };
 
   return (

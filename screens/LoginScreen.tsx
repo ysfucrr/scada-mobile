@@ -1,12 +1,15 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -15,12 +18,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  FlatList,
-  Modal,
 } from 'react-native';
-import AuthService from '../services/AuthService';
-import ApiService from '../services/ApiService';
 import { useConnection } from '../context/ConnectionContext';
+import { useWebSocket } from '../context/WebSocketContext';
+import ApiService from '../services/ApiService';
+import AuthService from '../services/AuthService';
 
 const { width } = Dimensions.get('window');
 
@@ -57,6 +59,7 @@ interface Agent {
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
   const { connect } = useConnection();
+  const { selectAgent, clearAllRegisterValues } = useWebSocket();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -64,21 +67,34 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   
-  // Agent seçimi için state'ler
+  // Agent selection state
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
 
   useEffect(() => {
-    checkAutoLogin();
-    fetchAvailableAgents();
+    // Clear any previously selected agent before loading the login screen
+    const clearPreviousAgent = async () => {
+      console.log('[LoginScreen] Clearing any previous agent selection on screen load');
+      await ApiService.setSelectedAgentId(null);
+      setSelectedAgent(null);
+    };
+    
+    clearPreviousAgent().then(() => {
+      checkAutoLogin();
+      fetchAvailableAgents();
+    });
   }, []);
   
   // Sunucudan bağlı agent'ları çek
   const fetchAvailableAgents = async () => {
     try {
       setLoadingAgents(true);
+      
+      // Önce API Service'deki agent ID'yi temizle
+      console.log('[LoginScreen] Clearing agent selection before fetching agents');
+      await ApiService.setSelectedAgentId(null);
       
       // Agent listesini ApiService üzerinden al
       const agentsList = await ApiService.getAvailableAgents();
@@ -88,12 +104,9 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
       if (agentsList && agentsList.length > 0) {
         setAgents(agentsList);
         
-        // Eğer sadece bir agent varsa otomatik olarak seç
-        if (agentsList.length === 1) {
-          setSelectedAgent(agentsList[0]);
-          // Also update the ApiService with the selected agent
-          await ApiService.setSelectedAgentId(agentsList[0].id);
-        }
+        // Artık otomatik seçim yapmıyoruz - kullanıcı manuel seçmeli
+        // Böylece farklı agent'lara login yaparken sorun yaşanmaz
+        console.log('[LoginScreen] Agent list loaded, waiting for user selection');
       }
     } catch (error) {
       console.error('[LoginScreen] Error fetching agents:', error);
@@ -132,12 +145,38 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
 
     setIsLoading(true);
     try {
-      // Make sure ApiService has the latest agent ID
+      console.log(`[LoginScreen] Starting login process with agent: ${selectedAgent?.id} (${selectedAgent?.name})`);
+      
+      // First, reset any existing connections to ensure a clean start
+      console.log('[LoginScreen] Resetting API service connections before login');
+      await ApiService.initialize();
+      
+      // Set the selected agent ID with a clean slate
       if (selectedAgent?.id) {
+        console.log(`[LoginScreen] Setting ApiService agent ID to: ${selectedAgent.id}`);
         await ApiService.setSelectedAgentId(selectedAgent.id);
+        
+        // Double check the API service agent ID is set correctly
+        const currentAgentId = ApiService.getSelectedAgentId();
+        console.log(`[LoginScreen] Confirmed ApiService agent ID: ${currentAgentId}`);
+        
+        if (currentAgentId !== selectedAgent.id) {
+          console.error(`[LoginScreen] Agent ID mismatch! UI: ${selectedAgent.id}, API: ${currentAgentId}`);
+          Alert.alert('Error', 'Agent selection issue. Please try again.');
+          setIsLoading(false);
+          return;
+        }
+        
+        // Store the agent selection in a persistent variable
+        await AsyncStorage.setItem('currentSelectedAgent', JSON.stringify({
+          id: selectedAgent.id,
+          name: selectedAgent.name
+        }));
+        console.log(`[LoginScreen] Saved selected agent to storage: ${selectedAgent.name}`);
       }
       
       // selectedAgent parametresini AuthService.simpleLogin'e gönder
+      console.log(`[LoginScreen] Attempting login with username: ${username}, agent: ${selectedAgent?.id}`);
       const success = await AuthService.simpleLogin(
         username,
         password,
@@ -146,18 +185,41 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
       );
       
       if (success) {
-        // Login başarılı olduktan sonra ConnectionContext'i güncelle
-        await connect();
-        console.log('[LoginScreen] Login successful, connection context updated');
+        // Before updating connection context, make sure we force a clean reconnection
+        console.log('[LoginScreen] Login successful, forcing clean connection update');
         
+        // Ensure any existing sockets are disconnected
+        try {
+          const SocketIO = require('socket.io-client');
+          if (typeof SocketIO.disconnectAll === 'function') {
+            SocketIO.disconnectAll();
+            console.log('[LoginScreen] Disconnected existing Socket.IO connections');
+          }
+        } catch (e) {
+          console.log('[LoginScreen] No Socket.IO connections to disconnect');
+        }
+        
+        // Now update the connection context with clean connections
+        await connect();
+        console.log('[LoginScreen] Connection context updated after successful login');
+        
+        // Finally, trigger the onLoginSuccess callback to navigate to the home screen
         if (onLoginSuccess) {
           onLoginSuccess();
         }
       } else {
-        Alert.alert('Login Failed', 'Invalid username or password');
+        console.log(`[LoginScreen] Login failed for agent: ${selectedAgent?.id}`);
+        Alert.alert('Login Failed', 'Invalid username or password for selected SCADA system');
+        
+        // Clear agent ID on failed login
+        await ApiService.setSelectedAgentId(null);
       }
     } catch (error: any) {
+      console.error(`[LoginScreen] Login error with agent ${selectedAgent?.id}:`, error);
       Alert.alert('Error', error.message || 'An error occurred during login');
+      
+      // Clear agent ID on error
+      await ApiService.setSelectedAgentId(null);
     } finally {
       setIsLoading(false);
     }
@@ -407,10 +469,24 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
                       selectedAgent?.id === item.id && styles.selectedAgentItem
                     ]}
                     onPress={async () => {
+                      // First clear any previous selection to avoid state issues
+                      await ApiService.setSelectedAgentId(null);
+                      
+                      // Also clear any cached register values before switching agents
+                      clearAllRegisterValues();
+                      
+                      // Then set the new selection
                       setSelectedAgent(item);
-                      // Update ApiService with selected agent ID
+                      
+                      // Update API Service and WebSocketContext with new agent selection
                       await ApiService.setSelectedAgentId(item.id);
+                      
+                      // Use WebSocketContext's selectAgent method to notify server
+                      await selectAgent(item.id, item.name);
+                      
                       console.log(`[LoginScreen] Selected agent: ${item.name} (${item.id})`);
+                      console.log(`[LoginScreen] ApiService agent ID now: ${ApiService.getSelectedAgentId()}`);
+                      
                       setShowAgentSelector(false);
                     }}
                   >

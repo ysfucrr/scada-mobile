@@ -31,10 +31,17 @@ class AuthService {
   // Login kullanıcı
   async login(credentials: LoginCredentials): Promise<{ success: boolean; message?: string; user?: User }> {
     try {
-      const response = await ApiService.post('/api/mobile-users/login', {
-        username: credentials.username,
-        password: credentials.password
-      });
+      console.log(`[AuthService] login() - Making login request with explicit agentId: ${credentials.agentId}`);
+      
+      // Explicitly pass the agent ID as a separate parameter to ensure it's used
+      const response = await ApiService.post(
+        '/api/mobile-users/login',
+        {
+          username: credentials.username,
+          password: credentials.password
+        },
+        credentials.agentId // Explicitly pass agent ID to API service
+      );
 
       if (response.success && response.user) {
         this.currentUser = response.user;
@@ -43,6 +50,7 @@ class AuthService {
         if (credentials.agentId) {
           this.selectedAgentId = credentials.agentId;
           await AsyncStorage.setItem('selectedAgentId', credentials.agentId);
+          console.log(`[AuthService] login success - saved agent ID: ${credentials.agentId}`);
         }
 
         // Beni hatırla seçildiyse kullanıcı bilgilerini kaydet
@@ -89,10 +97,18 @@ class AuthService {
         return { success: false, message: 'No saved credentials' };
       }
 
+      console.log(`[AuthService] AutoLogin with saved agent ID: ${savedAgentId}`);
+
+      // Önce ApiService'e agent ID'yi ayarla
+      if (savedAgentId) {
+        await ApiService.setSelectedAgentId(savedAgentId);
+      }
+
       // Önce kullanıcının hala geçerli olup olmadığını kontrol et
-      const verifyResponse = await ApiService.post('/api/mobile-users/verify', {
-        username: savedUsername
-      });
+      const verifyResponse = await ApiService.post('/api/mobile-users/verify',
+        { username: savedUsername },
+        savedAgentId || undefined // Convert null to undefined for type safety
+      );
 
       if (!verifyResponse.success || !verifyResponse.valid) {
         // Kullanıcı artık geçerli değil, kayıtlı bilgileri temizle
@@ -115,14 +131,46 @@ class AuthService {
 
   // Logout
   async logout(): Promise<void> {
-    this.currentUser = null;
-    this.selectedAgentId = null;
-    
-    // Geçerli agent seçimini kaldır
-    await AsyncStorage.removeItem('selectedAgentId');
-    
-    // Sadece oturum bilgisini temizle, beni hatırla bilgilerini koru
-    // Böylece kullanıcı tekrar giriş yapmak istediğinde bilgileri dolu gelir
+    try {
+      // Save the current agent ID before clearing it
+      const currentAgentId = this.selectedAgentId;
+      console.log(`[AuthService] Logout - Current agent ID: ${currentAgentId}`);
+      
+      // We won't try to send a server-side logout request as it's not necessary and causing errors
+      // Just perform client-side logout
+      
+      // Clear user data
+      this.currentUser = null;
+      this.selectedAgentId = null;
+      
+      console.log('[AuthService] Clearing agent selection during logout');
+      
+      // Clear agent selection in AsyncStorage
+      await AsyncStorage.removeItem('selectedAgentId');
+      
+      // Forcefully disconnect WebSocket if any
+      try {
+        const SocketIO = require('socket.io-client');
+        SocketIO.disconnectAll?.(); // Try to disconnect all sockets if method exists
+      } catch (e) {
+        console.log('[AuthService] No Socket.IO connections to disconnect');
+      }
+      
+      // Also clear agent selection in ApiService and reset any connections
+      await ApiService.setSelectedAgentId(null);
+      
+      // Force ApiService to clear any cached data
+      await ApiService.initialize();
+      
+      console.log('[AuthService] Agent selection and connections cleared. Current agent: ',
+                  await AsyncStorage.getItem('selectedAgentId'),
+                  'ApiService agent:', ApiService.getSelectedAgentId());
+      
+      // Sadece oturum bilgisini temizle, beni hatırla bilgilerini koru
+      // Böylece kullanıcı tekrar giriş yapmak istediğinde bilgileri dolu gelir
+    } catch (error) {
+      console.error('[AuthService] Error during logout:', error);
+    }
   }
 
   // Kayıtlı kullanıcı bilgilerini temizle
@@ -199,7 +247,29 @@ class AuthService {
 
   // Basitleştirilmiş login metodu (LoginScreen için)
   async simpleLogin(username: string, password: string, rememberMe: boolean, agentId?: string): Promise<boolean> {
+    console.log(`[AuthService] Attempting login with agent: ${agentId}`);
+    
+    // Login öncesi agent ID'sini kontrol et
+    const ApiService = require('./ApiService').default;
+    const currentAgentId = ApiService.getSelectedAgentId();
+    console.log(`[AuthService] Current API Service agent ID: ${currentAgentId}`);
+    
+    // Eğer agent ID'leri farklı ise ApiService'i güncelle
+    if (currentAgentId !== agentId) {
+      console.log(`[AuthService] Updating ApiService agent ID to: ${agentId}`);
+      await ApiService.setSelectedAgentId(agentId);
+    }
+    
     const result = await this.login({ username, password, rememberMe, agentId });
+    console.log(`[AuthService] Login result: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+    
+    // Login başarısız olursa agent ID'sini temizle
+    if (!result.success) {
+      console.log(`[AuthService] Login failed, clearing agent ID`);
+      await ApiService.setSelectedAgentId(null);
+      this.selectedAgentId = null;
+    }
+    
     return result.success;
   }
 

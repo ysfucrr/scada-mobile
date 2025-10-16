@@ -57,23 +57,36 @@ class ApiService {
   private useCloudBridge: boolean = false;
   private selectedAgentId: string | null = null;
  
-  async initialize() {
-    // Load selected agent ID from storage
-    try {
-      const agentId = await AsyncStorage.getItem('selectedAgentId');
-      if (agentId) {
-        this.selectedAgentId = agentId;
-        console.log(`[ApiService] Loaded selected agent ID: ${agentId}`);
-      }
-    } catch (error) {
-      console.error('[ApiService] Error loading agent ID:', error);
+  async initialize(preserveAgentId: boolean = true) {
+    console.log('[ApiService] Initializing service');
+    
+    // Store the current agentId if we want to preserve it
+    const currentAgentId = preserveAgentId ? this.selectedAgentId : null;
+    console.log(`[ApiService] Initialize with preserveAgentId=${preserveAgentId}, current=${currentAgentId}`);
+    
+    // Get the saved agent ID from storage
+    const savedAgentId = await AsyncStorage.getItem('selectedAgentId');
+    
+    // Determine which agent ID to use (priority: current > saved > null)
+    const effectiveAgentId = currentAgentId || savedAgentId || null;
+    
+    if (effectiveAgentId) {
+      console.log(`[ApiService] Using agent ID during init: ${effectiveAgentId}`);
+      this.selectedAgentId = effectiveAgentId;
+    } else {
+      console.log('[ApiService] No agent ID available, using null');
+      this.selectedAgentId = null;
     }
+    
+    // Load server settings
     await this.loadSettings();
     this.updateUrls();
     
     // Cloud Bridge kullanımını kontrol et - sadece 443 portu için
     // Artık her zaman HTTPS kullanıyoruz
     this.useCloudBridge = this.settings?.serverPort === '443';
+    
+    console.log(`[ApiService] Initialization complete. Cloud Bridge: ${this.useCloudBridge}, Base URL: ${this.baseUrl}, AgentID: ${this.selectedAgentId}`);
   }
 
   private async loadSettings(): Promise<void> {
@@ -111,8 +124,17 @@ class ApiService {
     }
   }
 
-  // Update the selected agent ID
+  // Update the selected agent ID and force reconnection
   async setSelectedAgentId(agentId: string | null) {
+    // First clear all existing connections if agent ID is changing
+    const isChanging = this.selectedAgentId !== agentId;
+    if (isChanging && this.selectedAgentId) {
+      console.log(`[ApiService] Agent ID changing from ${this.selectedAgentId} to ${agentId}, resetting connections`);
+      
+      // Clear any caches or pending requests
+      await this._clearConnectionCache();
+    }
+    
     this.selectedAgentId = agentId;
     console.log(`[ApiService] Set selected agent ID to: ${agentId}`);
     
@@ -120,6 +142,56 @@ class ApiService {
       await AsyncStorage.setItem('selectedAgentId', agentId);
     } else {
       await AsyncStorage.removeItem('selectedAgentId');
+    }
+    
+    // Force re-initialization if agent changed
+    if (isChanging) {
+      await this.initialize();
+      console.log(`[ApiService] Reinitialized service for new agent: ${agentId}`);
+      
+      // Signal to the app that the agent has changed
+      await AsyncStorage.setItem('agent_changed_event', Date.now().toString());
+    }
+  }
+  
+  // Helper method to clear any connection caches
+  private async _clearConnectionCache() {
+    console.log(`[ApiService] Clearing connection cache and resetting state`);
+    
+    // Use the resetConnection method from WebSocketContext if available
+    try {
+      // Import WebSocket context functionality
+      const { useWebSocket } = require('../context/WebSocketContext');
+      
+      // This approach uses AsyncStorage to coordinate reset
+      // We'll store a reset request that the WebSocketContext can detect
+      await AsyncStorage.setItem('ws_connection_reset_request', 'true');
+      await AsyncStorage.setItem('ws_connection_reset_timestamp', Date.now().toString());
+      
+      console.log('[ApiService] WebSocket reset request saved, connection will reset');
+      
+      // Also directly clear the register values cache
+      try {
+        await AsyncStorage.removeItem('register_values_cache');
+        console.log('[ApiService] Register values cache cleared directly');
+      } catch (cacheError) {
+        console.warn('[ApiService] Error clearing register cache:', cacheError);
+      }
+      
+    } catch (error) {
+      // Fallback to basic disconnect if context not available
+      console.warn('[ApiService] Using fallback WebSocket disconnect:', error);
+      
+      try {
+        const io = require('socket.io-client');
+        
+        if (typeof io.disconnect === 'function') {
+          io.disconnect();
+          console.log('[ApiService] Disconnected existing Socket.IO connections');
+        }
+      } catch (ioError) {
+        console.warn('[ApiService] Error in fallback WebSocket disconnection:', ioError);
+      }
     }
   }
   
@@ -129,7 +201,8 @@ class ApiService {
   }
 
   // Cloud Bridge üzerinden veri çekmek için yeni metod
-  async fetchViaCloudBridge(path: string, method = 'GET', body?: any) {
+  // Use this explicit parameter instead of this.selectedAgentId
+  async fetchViaCloudBridge(path: string, method = 'GET', body?: any, explicitAgentId?: string) {
     try {
       if (!this.settings) {
         await this.loadSettings();
@@ -142,12 +215,19 @@ class ApiService {
       // Cloud Bridge formatında istek gövdesi oluştur
       // Normalize the path - don't add /api/mobile prefix to paths that already have it
       const fullPath = path.startsWith('/api/') ? path : `/api/mobile${path}`;
+      
+      // Use explicitAgentId if provided, otherwise fall back to this.selectedAgentId
+      // This ensures we always have the correct agent ID from the most recent context
+      const agentIdToUse = explicitAgentId || this.selectedAgentId;
+      
+      console.log(`[ApiService] fetchViaCloudBridge using agent ID: ${agentIdToUse} for path: ${path}`);
+      
       const requestBody = {
         method,
         path: fullPath,
         body: body || {},
-        // Include agent ID if available and relevant (for authentication and data requests)
-        agentId: this.selectedAgentId
+        // ÖNEMLİ: Her zaman doğru agent ID'yi gönder
+        targetAgentId: agentIdToUse
       };
       
       console.log(`Cloud Bridge proxy request to: ${url}`, requestBody);
@@ -681,13 +761,16 @@ class ApiService {
   }
 
   // Generic POST method for API calls
-  async post(path: string, body: any): Promise<any> {
+  async post(path: string, body: any, agentId?: string): Promise<any> {
     try {
       await this.initialize();
       
+      // Log the agent ID before making the request
+      console.log(`[ApiService] POST request to ${path} with agent: ${agentId || this.selectedAgentId}`);
+      
       if (this.useCloudBridge) {
-        // Cloud Bridge üzerinden POST isteği
-        return await this.fetchViaCloudBridge(path, 'POST', body);
+        // Cloud Bridge üzerinden POST isteği - explicitly pass the agentId parameter
+        return await this.fetchViaCloudBridge(path, 'POST', body, agentId);
       } else {
         // Doğrudan SCADA API'sine POST isteği
         const url = path.startsWith('http') ? path : `${this.baseUrl}${path}`;
