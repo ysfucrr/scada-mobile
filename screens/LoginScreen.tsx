@@ -333,7 +333,12 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
                           styles.inputContainer,
                           selectedAgent ? styles.selectedInputContainer : null
                         ]}
-                        onPress={() => setShowAgentSelector(true)}
+                        onPress={async () => {
+                          // Modal açılmadan önce agent listesini yenile
+                          console.log('[LoginScreen] Refreshing agent list before opening modal');
+                          await fetchAvailableAgents();
+                          setShowAgentSelector(true);
+                        }}
                       >
                         <MaterialCommunityIcons
                           name="server-network"

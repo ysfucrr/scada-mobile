@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { ServerSettings } from '../services/ApiService';
+import { Platform } from 'react-native';
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
@@ -234,6 +235,16 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       const selectedAgentId = await AsyncStorage.getItem('selectedAgentId');
       console.log(`[SocketIO] Connecting with selected agent ID: ${selectedAgentId || 'none'}`);
 
+      // Cihaz bilgilerini topla - React Native Platform API kullanarak
+      const deviceInfo = {
+        platform: Platform.OS === 'ios' ? 'iOS' : 'Android', // Platform adını düzgün formatla
+        model: 'React Native App', // Genel model adı
+        appVersion: '1.0.0', // Sabit versiyon
+        osVersion: Platform.Version ? String(Platform.Version) : 'Unknown', // OS versiyonu
+      };
+
+      console.log(`[SocketIO] Device info:`, deviceInfo);
+
       const newSocket = io(socketURL, {
         transports: ['websocket', 'polling'],
         reconnectionAttempts: 5,
@@ -244,7 +255,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         query: {
           type: 'mobile', // Mobil uygulama olduğunu belirt
           clientId: 'mobile-app-' + Date.now(), // Benzersiz bir istemci ID'si oluştur
-          agentId: selectedAgentId || undefined // Seçili agent ID'si
+          agentId: selectedAgentId || undefined, // Seçili agent ID'si
+          // Cihaz bilgilerini query parametresi olarak gönder
+          platform: deviceInfo.platform,
+          model: deviceInfo.model,
+          appVersion: deviceInfo.appVersion,
+          osVersion: deviceInfo.osVersion
         }
       });
 
