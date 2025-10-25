@@ -215,16 +215,31 @@ export default function ConsumptionScreen() {
           // Load yearly data
           const yearlyData = await ApiService.getTrendLogComparison(widget.trendLogId, 'year');
           if (yearlyData && yearlyData.success) {
-            console.log(`[YEARLY DEBUG] Widget ${widget.title}:`, {
-              currentYearTotal: yearlyData.comparison?.currentValue,
-              previousYearTotal: yearlyData.comparison?.previousValue,
-              percentageChange: yearlyData.comparison?.percentageChange,
-              monthlyDataLength: yearlyData.monthlyData?.currentYear?.length,
-              currentYearLabel: yearlyData.monthlyData?.currentYearLabel,
-              isKWHCounter: yearlyData.trendLog?.isKWHCounter,
-              firstMonthCurrent: yearlyData.monthlyData?.currentYear?.[0],
-              lastMonthCurrent: yearlyData.monthlyData?.currentYear?.[11]
-            });
+            // More visible debug log
+            console.log('====================');
+            console.log(`[YEARLY DEBUG] Widget: ${widget.title}`);
+            console.log('Current Year Total:', yearlyData.comparison?.currentValue);
+            console.log('Previous Year Total:', yearlyData.comparison?.previousValue);
+            console.log('Percentage Change:', yearlyData.comparison?.percentageChange);
+            console.log('Monthly Data Exists:', !!yearlyData.monthlyData);
+            console.log('Current Year Label:', yearlyData.monthlyData?.currentYearLabel);
+            console.log('Previous Year Label:', yearlyData.monthlyData?.previousYearLabel);
+            console.log('isKWHCounter:', yearlyData.trendLog?.isKWHCounter);
+            
+            if (yearlyData.monthlyData?.currentYear) {
+              console.log('Current Year Monthly Values:');
+              yearlyData.monthlyData.currentYear.forEach((m: any, idx: number) => {
+                console.log(`  Month ${idx}: ${m?.value || 0}`);
+              });
+            }
+            
+            if (yearlyData.monthlyData?.previousYear) {
+              console.log('Previous Year Monthly Values:');
+              yearlyData.monthlyData.previousYear.forEach((m: any, idx: number) => {
+                console.log(`  Month ${idx}: ${m?.value || 0}`);
+              });
+            }
+            console.log('====================');
             yearlyDataMap.set(widget._id, yearlyData);
           } else if (yearlyData && !yearlyData.success) {
             console.error(`Error loading yearly data for widget ${widget._id}:`, yearlyData.error);
@@ -442,7 +457,25 @@ export default function ConsumptionScreen() {
                           showsHorizontalScrollIndicator={false}
                           contentContainerStyle={styles.monthlyBarsContainer}
                         >
-                          {monthlyData.currentYear && monthlyData.previousYear && Array.from({ length: 12 }, (_, monthIndex) => {
+                          {(() => {
+                            // Only log once per widget instead of multiple times
+                            const debugKey = `debug_${item._id}`;
+                            if (!(window as any)[debugKey]) {
+                              (window as any)[debugKey] = true;
+                              console.log('[MONTHLY DATA DEBUG ONCE]', {
+                                widgetTitle: item.title,
+                                hasCurrentYear: !!monthlyData.currentYear,
+                                hasPreviousYear: !!monthlyData.previousYear,
+                                currentYearLength: monthlyData.currentYear?.length,
+                                previousYearLength: monthlyData.previousYear?.length,
+                                sampleCurrentMonth: monthlyData.currentYear?.[0],
+                                samplePreviousMonth: monthlyData.previousYear?.[0]
+                              });
+                            }
+                            
+                            if (!monthlyData.currentYear || !monthlyData.previousYear) return null;
+                            
+                            return Array.from({ length: 12 }, (_, monthIndex) => {
                             const currentYearData = monthlyData.currentYear[monthIndex];
                             const previousYearData = monthlyData.previousYear[monthIndex];
                             const currentValue = currentYearData?.value ?? 0;
@@ -472,21 +505,20 @@ export default function ConsumptionScreen() {
                               ? Math.max((previousValue / maxValue) * maxBarHeight, 10)
                               : 0;
                             
-                            // Debug log for first month
-                            if (monthIndex === 0) {
-                              console.log('[YEARLY BAR DEBUG]', {
-                                monthIndex,
-                                currentValue,
-                                previousValue,
-                                maxValue,
-                                currentBarHeight,
-                                previousBarHeight
-                              });
-                            }
+                            // Debug log for all months to see the full picture
+                            console.log(`[YEARLY BAR DEBUG Month ${monthIndex}]`, {
+                              monthIndex,
+                              monthName: new Date(2024, monthIndex).toLocaleDateString('en-US', { month: 'short' }),
+                              currentValue,
+                              previousValue,
+                              maxValue,
+                              currentBarHeight,
+                              previousBarHeight
+                            });
                         
                         return (
                           <View key={monthIndex} style={styles.monthColumn}>
-                            <View style={styles.monthBars}>
+                            <View style={[styles.monthBars, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
                               {/* Current year bar */}
                               <View style={styles.monthBarWrapper}>
                                 {currentValue > 0 && (
@@ -499,7 +531,8 @@ export default function ConsumptionScreen() {
                                     styles.monthBar,
                                     styles.currentYearBar,
                                     {
-                                      height: currentBarHeight
+                                      height: currentBarHeight > 0 ? currentBarHeight : 0,
+                                      backgroundColor: currentBarHeight > 0 ? '#FFC107' : 'transparent'
                                     }
                                   ]}
                                 />
@@ -529,7 +562,8 @@ export default function ConsumptionScreen() {
                             </Text>
                           </View>
                         );
-                      })}
+                      });
+                          })()}
                     </ScrollView>
                     
                     {/* Legend */}
