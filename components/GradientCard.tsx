@@ -88,6 +88,7 @@ const GradientCard: React.FC<GradientCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
+    // Don't set overflow on the Card/Surface itself
   },
   overflowWrapper: {
     overflow: 'hidden',

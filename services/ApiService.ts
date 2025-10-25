@@ -796,6 +796,76 @@ class ApiService {
     }
   }
 
+  async getConsumptionWidgets(): Promise<any[]> {
+    try {
+      await this.initialize();
+      
+      let data;
+      
+      if (this.useCloudBridge) {
+        // Cloud Bridge üzerinden istek yap
+        data = await this.fetchViaCloudBridge('/consumption-widgets');
+      } else {
+        // Doğrudan SCADA API'sine istek yap
+        const response = await fetch(`${this.baseUrl}/api/mobile/consumption-widgets`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        data = await response.json();
+      }
+      
+      if (!data.success || !data.widgets) {
+        console.warn('No consumption widgets found in response:', data);
+        return [];
+      }
+      
+      console.log(`Loaded ${data.widgets.length} consumption widgets`);
+      return data.widgets;
+    } catch (error) {
+      console.error('Error fetching consumption widgets:', error);
+      return [];
+    }
+  }
+
+  async getTrendLogComparison(trendLogId: string, timeFilter: 'month' | 'year'): Promise<any> {
+    try {
+      await this.initialize();
+      
+      if (this.useCloudBridge) {
+        // Cloud Bridge üzerinden istek yap - mobile comparison endpoint'ini kullan
+        const path = `/trend-logs/${trendLogId}/comparison?timeFilter=${timeFilter}`;
+        return await this.fetchViaCloudBridge(path);
+      } else {
+        // Doğrudan SCADA API'sine istek yap - mobile comparison endpoint'ini kullan
+        const url = `${this.baseUrl}/api/mobile/trend-logs/${trendLogId}/comparison?timeFilter=${timeFilter}`;
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
+      }
+    } catch (error) {
+      console.error('Error fetching trend log comparison:', error);
+      return null;
+    }
+  }
+
 }
 
 export default new ApiService();

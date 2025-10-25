@@ -22,6 +22,7 @@ import LoginScreen from './screens/LoginScreen';
 import LogsScreen from './screens/LogsScreen';
 import RegistersScreen from './screens/RegistersScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import ConsumptionScreen from './screens/ConsumptionScreen';
 
 // Contexts
 import { ConnectionProvider } from './context/ConnectionContext';
@@ -1216,6 +1217,7 @@ function MainApp() {
   const menuItems = [
     { name: 'Home', icon: 'home', title: 'Home' },
     { name: 'Registers', icon: 'format-list-bulleted', title: 'Registers' },
+    { name: 'Consumption', icon: 'flash', title: 'Consumption' },
     { name: 'Logs', icon: 'chart-line', title: 'Logs' },
     { name: 'Settings', icon: 'cog', title: 'Settings' },
   ];
@@ -1317,6 +1319,8 @@ function MainApp() {
         return <HomeScreen />;
       case 'Registers':
         return <RegistersScreen isActive={currentScreen === 'Registers'} />;
+      case 'Consumption':
+        return <ConsumptionScreen />;
       case 'Logs':
         return <LogsScreen />;
       default:
