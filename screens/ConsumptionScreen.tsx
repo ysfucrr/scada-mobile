@@ -215,6 +215,16 @@ export default function ConsumptionScreen() {
           // Load yearly data
           const yearlyData = await ApiService.getTrendLogComparison(widget.trendLogId, 'year');
           if (yearlyData && yearlyData.success) {
+            console.log(`[YEARLY DEBUG] Widget ${widget.title}:`, {
+              currentYearTotal: yearlyData.comparison?.currentValue,
+              previousYearTotal: yearlyData.comparison?.previousValue,
+              percentageChange: yearlyData.comparison?.percentageChange,
+              monthlyDataLength: yearlyData.monthlyData?.currentYear?.length,
+              currentYearLabel: yearlyData.monthlyData?.currentYearLabel,
+              isKWHCounter: yearlyData.trendLog?.isKWHCounter,
+              firstMonthCurrent: yearlyData.monthlyData?.currentYear?.[0],
+              lastMonthCurrent: yearlyData.monthlyData?.currentYear?.[11]
+            });
             yearlyDataMap.set(widget._id, yearlyData);
           } else if (yearlyData && !yearlyData.success) {
             console.error(`Error loading yearly data for widget ${widget._id}:`, yearlyData.error);
@@ -432,20 +442,46 @@ export default function ConsumptionScreen() {
                           showsHorizontalScrollIndicator={false}
                           contentContainerStyle={styles.monthlyBarsContainer}
                         >
-                          {Array.from({ length: 12 }, (_, monthIndex) => {
-                            const currentYearData = monthlyData.currentYear?.[monthIndex];
-                            const previousYearData = monthlyData.previousYear?.[monthIndex];
+                          {monthlyData.currentYear && monthlyData.previousYear && Array.from({ length: 12 }, (_, monthIndex) => {
+                            const currentYearData = monthlyData.currentYear[monthIndex];
+                            const previousYearData = monthlyData.previousYear[monthIndex];
                             const currentValue = currentYearData?.value ?? 0;
                             const previousValue = previousYearData?.value ?? 0;
                             
                             // Calculate max value safely
-                            let maxValue = 0;
-                            if (monthlyData.currentYear && monthlyData.previousYear) {
+                            let maxValue = 1;
+                            try {
                               const allValues = [
                                 ...monthlyData.currentYear.map((m: any) => m?.value || 0),
                                 ...monthlyData.previousYear.map((m: any) => m?.value || 0)
                               ];
-                              maxValue = Math.max(...allValues, 1); // Ensure at least 1 to avoid division by 0
+                              if (allValues.length > 0) {
+                                maxValue = Math.max(...allValues, 1);
+                              }
+                            } catch (error) {
+                              console.error('Error calculating max value:', error);
+                              maxValue = Math.max(currentValue, previousValue, 1);
+                            }
+                            
+                            // Calculate heights in pixels (max height is 100px)
+                            const maxBarHeight = 100;
+                            const currentBarHeight = currentValue > 0
+                              ? Math.max((currentValue / maxValue) * maxBarHeight, 10)
+                              : 0;
+                            const previousBarHeight = previousValue > 0
+                              ? Math.max((previousValue / maxValue) * maxBarHeight, 10)
+                              : 0;
+                            
+                            // Debug log for first month
+                            if (monthIndex === 0) {
+                              console.log('[YEARLY BAR DEBUG]', {
+                                monthIndex,
+                                currentValue,
+                                previousValue,
+                                maxValue,
+                                currentBarHeight,
+                                previousBarHeight
+                              });
                             }
                         
                         return (
@@ -453,16 +489,17 @@ export default function ConsumptionScreen() {
                             <View style={styles.monthBars}>
                               {/* Current year bar */}
                               <View style={styles.monthBarWrapper}>
-                                <Text style={styles.monthBarValue}>
-                                  {currentValue > 0 ? formatEnergyValue(currentValue, 0) : ''}
-                                </Text>
+                                {currentValue > 0 && (
+                                  <Text style={styles.monthBarValue}>
+                                    {formatEnergyValue(currentValue, 0)}
+                                  </Text>
+                                )}
                                 <View
                                   style={[
                                     styles.monthBar,
                                     styles.currentYearBar,
                                     {
-                                      height: maxValue > 0 ? `${(currentValue / maxValue) * 100}%` : '0%',
-                                      minHeight: currentValue > 0 ? 10 : 0
+                                      height: currentBarHeight
                                     }
                                   ]}
                                 />
@@ -470,16 +507,17 @@ export default function ConsumptionScreen() {
                               
                               {/* Previous year bar */}
                               <View style={styles.monthBarWrapper}>
-                                <Text style={styles.monthBarValue}>
-                                  {previousValue > 0 ? formatEnergyValue(previousValue, 0) : ''}
-                                </Text>
+                                {previousValue > 0 && (
+                                  <Text style={styles.monthBarValue}>
+                                    {formatEnergyValue(previousValue, 0)}
+                                  </Text>
+                                )}
                                 <View
                                   style={[
                                     styles.monthBar,
                                     styles.previousYearBar,
                                     {
-                                      height: maxValue > 0 ? `${(previousValue / maxValue) * 100}%` : '0%',
-                                      minHeight: previousValue > 0 ? 10 : 0
+                                      height: previousBarHeight
                                     }
                                   ]}
                                 />
@@ -797,11 +835,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     height: 120,
     marginBottom: 5,
+    minHeight: 120,
   },
   monthBarWrapper: {
     alignItems: 'center',
     justifyContent: 'flex-end',
     marginHorizontal: 2,
+    height: '100%',
   },
   monthBarValue: {
     fontSize: 9,
@@ -813,6 +853,7 @@ const styles = StyleSheet.create({
     width: 20,
     borderRadius: 4,
     marginBottom: 2,
+    minHeight: 2,
   },
   currentYearBar: {
     backgroundColor: '#FFC107',
