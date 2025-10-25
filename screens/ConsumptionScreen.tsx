@@ -106,8 +106,6 @@ export default function ConsumptionScreen() {
     const activeSubscriptions = new Map<string, any>();
     
     if (wsConnected && selectedTimeFilter === 'month') {
-      console.log('[ConsumptionScreen] Setting up WebSocket subscriptions for live data');
-      
       widgets.forEach(widget => {
         if (widget.trendLogId && widgetMonthlyData.has(widget._id)) {
           const data = widgetMonthlyData.get(widget._id);
@@ -125,11 +123,8 @@ export default function ConsumptionScreen() {
               registerId: register._id
             };
             
-            console.log(`[ConsumptionScreen] Watching register ${register._id} (address: ${register.address}) for widget ${widget.title}`);
-            
             // Create callback for this widget
             const callback = (value: any) => {
-              console.log(`[ConsumptionScreen] Received value ${value} for widget ${widget.title}`);
               setLiveValues(prev => {
                 const newMap = new Map(prev);
                 newMap.set(widget._id, value);
@@ -153,7 +148,6 @@ export default function ConsumptionScreen() {
       activeSubscriptions.forEach((subscription, widgetId) => {
         const callback = activeCallbacks.get(widgetId);
         if (callback) {
-          console.log(`[ConsumptionScreen] Unwatching register for widget ${widgetId}`);
           unwatchRegister(subscription, callback);
         }
       });
@@ -186,7 +180,6 @@ export default function ConsumptionScreen() {
     
     // First, get all registers to find register details
     const registers = await ApiService.getRegisters();
-    console.log(`[ConsumptionScreen] Loaded ${registers.length} registers for lookup`);
     
     for (const widget of widgetsList) {
       if (widget.trendLogId) {
@@ -198,12 +191,6 @@ export default function ConsumptionScreen() {
             if (monthlyData.trendLog?.registerId) {
               const register = registers.find(r => r._id === monthlyData.trendLog.registerId);
               if (register) {
-                console.log(`[ConsumptionScreen] Found register details for widget ${widget.title}:`, {
-                  address: register.address,
-                  analyzerId: register.analyzerId,
-                  dataType: register.dataType,
-                  scale: register.scale
-                });
                 monthlyData.registerDetails = register;
               }
             }
@@ -215,31 +202,6 @@ export default function ConsumptionScreen() {
           // Load yearly data
           const yearlyData = await ApiService.getTrendLogComparison(widget.trendLogId, 'year');
           if (yearlyData && yearlyData.success) {
-            // More visible debug log
-            console.log('====================');
-            console.log(`[YEARLY DEBUG] Widget: ${widget.title}`);
-            console.log('Current Year Total:', yearlyData.comparison?.currentValue);
-            console.log('Previous Year Total:', yearlyData.comparison?.previousValue);
-            console.log('Percentage Change:', yearlyData.comparison?.percentageChange);
-            console.log('Monthly Data Exists:', !!yearlyData.monthlyData);
-            console.log('Current Year Label:', yearlyData.monthlyData?.currentYearLabel);
-            console.log('Previous Year Label:', yearlyData.monthlyData?.previousYearLabel);
-            console.log('isKWHCounter:', yearlyData.trendLog?.isKWHCounter);
-            
-            if (yearlyData.monthlyData?.currentYear) {
-              console.log('Current Year Monthly Values:');
-              yearlyData.monthlyData.currentYear.forEach((m: any, idx: number) => {
-                console.log(`  Month ${idx}: ${m?.value || 0}`);
-              });
-            }
-            
-            if (yearlyData.monthlyData?.previousYear) {
-              console.log('Previous Year Monthly Values:');
-              yearlyData.monthlyData.previousYear.forEach((m: any, idx: number) => {
-                console.log(`  Month ${idx}: ${m?.value || 0}`);
-              });
-            }
-            console.log('====================');
             yearlyDataMap.set(widget._id, yearlyData);
           } else if (yearlyData && !yearlyData.success) {
             console.error(`Error loading yearly data for widget ${widget._id}:`, yearlyData.error);
@@ -458,30 +420,11 @@ export default function ConsumptionScreen() {
                           contentContainerStyle={styles.monthlyBarsContainer}
                         >
                           {(() => {
-                            // Only log once per widget instead of multiple times
-                            const debugKey = `debug_${item._id}`;
-                            if (!(window as any)[debugKey]) {
-                              (window as any)[debugKey] = true;
-                              console.log('[MONTHLY DATA DEBUG ONCE]', {
-                                widgetTitle: item.title,
-                                hasCurrentYear: !!monthlyData.currentYear,
-                                hasPreviousYear: !!monthlyData.previousYear,
-                                currentYearLength: monthlyData.currentYear?.length,
-                                previousYearLength: monthlyData.previousYear?.length,
-                                sampleCurrentMonth: monthlyData.currentYear?.[0],
-                                samplePreviousMonth: monthlyData.previousYear?.[0]
-                              });
+                            if (!monthlyData.currentYear || !monthlyData.previousYear) {
+                              return null;
                             }
                             
-                            if (!monthlyData.currentYear || !monthlyData.previousYear) return null;
-                            
-                            return Array.from({ length: 12 }, (_, monthIndex) => {
-                            const currentYearData = monthlyData.currentYear[monthIndex];
-                            const previousYearData = monthlyData.previousYear[monthIndex];
-                            const currentValue = currentYearData?.value ?? 0;
-                            const previousValue = previousYearData?.value ?? 0;
-                            
-                            // Calculate max value safely
+                            // Calculate max value once for all months
                             let maxValue = 1;
                             try {
                               const allValues = [
@@ -493,76 +436,71 @@ export default function ConsumptionScreen() {
                               }
                             } catch (error) {
                               console.error('Error calculating max value:', error);
-                              maxValue = Math.max(currentValue, previousValue, 1);
+                              maxValue = 1;
                             }
                             
-                            // Calculate heights in pixels (max height is 100px)
-                            const maxBarHeight = 100;
-                            const currentBarHeight = currentValue > 0
-                              ? Math.max((currentValue / maxValue) * maxBarHeight, 10)
-                              : 0;
-                            const previousBarHeight = previousValue > 0
-                              ? Math.max((previousValue / maxValue) * maxBarHeight, 10)
-                              : 0;
-                            
-                            // Debug log for all months to see the full picture
-                            console.log(`[YEARLY BAR DEBUG Month ${monthIndex}]`, {
-                              monthIndex,
-                              monthName: new Date(2024, monthIndex).toLocaleDateString('en-US', { month: 'short' }),
-                              currentValue,
-                              previousValue,
-                              maxValue,
-                              currentBarHeight,
-                              previousBarHeight
-                            });
-                        
-                        return (
-                          <View key={monthIndex} style={styles.monthColumn}>
-                            <View style={[styles.monthBars, { backgroundColor: 'rgba(255,255,255,0.05)' }]}>
-                              {/* Current year bar */}
-                              <View style={styles.monthBarWrapper}>
-                                {currentValue > 0 && (
-                                  <Text style={styles.monthBarValue}>
-                                    {formatEnergyValue(currentValue, 0)}
-                                  </Text>
-                                )}
-                                <View
-                                  style={[
-                                    styles.monthBar,
-                                    styles.currentYearBar,
-                                    {
-                                      height: currentBarHeight > 0 ? currentBarHeight : 0,
-                                      backgroundColor: currentBarHeight > 0 ? '#FFC107' : 'transparent'
-                                    }
-                                  ]}
-                                />
-                              </View>
+                            return Array.from({ length: 12 }, (_, monthIndex) => {
+                              const currentYearData = monthlyData.currentYear[monthIndex];
+                              const previousYearData = monthlyData.previousYear[monthIndex];
+                              const currentValue = currentYearData?.value ?? 0;
+                              const previousValue = previousYearData?.value ?? 0;
                               
-                              {/* Previous year bar */}
-                              <View style={styles.monthBarWrapper}>
-                                {previousValue > 0 && (
-                                  <Text style={styles.monthBarValue}>
-                                    {formatEnergyValue(previousValue, 0)}
+                              // Calculate heights in pixels (max height is 100px)
+                              const maxBarHeight = 100;
+                              const currentBarHeight = currentValue > 0
+                                ? Math.max((currentValue / maxValue) * maxBarHeight, 5)
+                                : 0;
+                              const previousBarHeight = previousValue > 0
+                                ? Math.max((previousValue / maxValue) * maxBarHeight, 5)
+                                : 0;
+                          
+                              return (
+                                <View key={monthIndex} style={styles.monthColumn}>
+                                  <View style={styles.monthBars}>
+                                    {/* Current year bar */}
+                                    <View style={styles.monthBarWrapper}>
+                                      {currentValue > 0 && (
+                                        <Text style={styles.monthBarValue}>
+                                          {formatEnergyValue(currentValue, 0)}
+                                        </Text>
+                                      )}
+                                      <View
+                                        style={[
+                                          styles.monthBar,
+                                          styles.currentYearBar,
+                                          {
+                                            height: currentBarHeight,
+                                          }
+                                        ]}
+                                      />
+                                    </View>
+                                    
+                                    {/* Previous year bar */}
+                                    <View style={styles.monthBarWrapper}>
+                                      {previousValue > 0 && (
+                                        <Text style={styles.monthBarValue}>
+                                          {formatEnergyValue(previousValue, 0)}
+                                        </Text>
+                                      )}
+                                      <View
+                                        style={[
+                                          styles.monthBar,
+                                          styles.previousYearBar,
+                                          {
+                                            height: previousBarHeight,
+                                            backgroundColor: previousBarHeight > 0 ? '#9cf990ff' : 'transparent'
+                                          }
+                                        ]}
+                                      />
+                                    </View>
+                                  </View>
+                                  
+                                  <Text style={styles.monthLabel}>
+                                    {new Date(2024, monthIndex).toLocaleDateString('en-US', { month: 'short' })}
                                   </Text>
-                                )}
-                                <View
-                                  style={[
-                                    styles.monthBar,
-                                    styles.previousYearBar,
-                                    {
-                                      height: previousBarHeight
-                                    }
-                                  ]}
-                                />
-                              </View>
-                            </View>
-                            
-                            <Text style={styles.monthLabel}>
-                              {new Date(2024, monthIndex).toLocaleDateString('en-US', { month: 'short' })}
-                            </Text>
-                          </View>
-                        );
-                      });
+                                </View>
+                              );
+                            });
                           })()}
                     </ScrollView>
                     
@@ -573,7 +511,7 @@ export default function ConsumptionScreen() {
                         <Text style={styles.legendText}>{monthlyData.currentYearLabel}</Text>
                       </View>
                       <View style={[styles.legendItem, { marginLeft: 20 }]}>
-                        <View style={[styles.legendDot, { backgroundColor: '#90CAF9' }]} />
+                        <View style={[styles.legendDot, { backgroundColor: '#9cf990ff' }]} />
                         <Text style={styles.legendText}>{monthlyData.previousYearLabel}</Text>
                       </View>
                     </View>
@@ -595,13 +533,6 @@ export default function ConsumptionScreen() {
                 )
               )}
 
-              {/* Live Indicator */}
-              {liveValue !== undefined && selectedTimeFilter === 'month' && (
-                <View style={styles.liveIndicatorContainer}>
-                  <View style={styles.pulseIndicator} />
-                  <Text style={styles.liveText}>LIVE</Text>
-                </View>
-              )}
             </View>
           </BlurView>
         </GradientCard>
@@ -810,13 +741,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bar: {
-    width: '60%',
+    width: '15%',
     marginVertical: 8,
     borderRadius: 4,
     minHeight: 20,
   },
   previousBar: {
-    backgroundColor: '#90CAF9',
+    backgroundColor: '#9cf990ff',
   },
   currentBar: {
     backgroundColor: '#FFC107',
@@ -869,31 +800,33 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     height: 120,
     marginBottom: 5,
-    minHeight: 120,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 4,
+    padding: 4,
   },
   monthBarWrapper: {
     alignItems: 'center',
     justifyContent: 'flex-end',
     marginHorizontal: 2,
-    height: '100%',
+    flex: 1,
   },
   monthBarValue: {
     fontSize: 9,
     color: 'rgba(255,255,255,0.8)',
     marginBottom: 2,
-    minHeight: 12,
+    textAlign: 'center',
   },
   monthBar: {
     width: 20,
     borderRadius: 4,
-    marginBottom: 2,
     minHeight: 2,
+    backgroundColor: '#9cf990ff',
   },
   currentYearBar: {
     backgroundColor: '#FFC107',
   },
   previousYearBar: {
-    backgroundColor: '#90CAF9',
+    backgroundColor: '#9cf990ff',
   },
   monthLabel: {
     fontSize: 11,

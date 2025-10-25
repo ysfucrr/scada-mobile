@@ -1217,7 +1217,7 @@ function MainApp() {
   const menuItems = [
     { name: 'Home', icon: 'home', title: 'Home' },
     { name: 'Registers', icon: 'format-list-bulleted', title: 'Registers' },
-    { name: 'Consumption', icon: 'flash', title: 'Consumption' },
+    { name: 'Consumption', icon: 'chart-bar', title: 'Consumption' },
     { name: 'Logs', icon: 'chart-line', title: 'Logs' },
     { name: 'Settings', icon: 'cog', title: 'Settings' },
   ];
