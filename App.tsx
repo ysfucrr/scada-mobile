@@ -17,12 +17,12 @@ import {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Screens
+import ConsumptionScreen from './screens/ConsumptionScreen';
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import LogsScreen from './screens/LogsScreen';
 import RegistersScreen from './screens/RegistersScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import ConsumptionScreen from './screens/ConsumptionScreen';
 
 // Contexts
 import { ConnectionProvider } from './context/ConnectionContext';

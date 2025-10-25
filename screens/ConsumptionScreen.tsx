@@ -1,22 +1,20 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  RefreshControl,
   Alert,
   Animated,
-  TouchableOpacity,
   Dimensions,
-  ScrollView
+  FlatList,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { Card, useTheme as usePaperTheme } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';

@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import { io, Socket } from 'socket.io-client';
 import { ServerSettings } from '../services/ApiService';
-import { Platform } from 'react-native';
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected';
 
