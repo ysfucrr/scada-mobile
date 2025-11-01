@@ -320,7 +320,7 @@ export default function ConsumptionScreen() {
                   </Text>
                   <Text style={[
                     styles.changeValue,
-                    { color: percentageChange >= 0 ? '#F44336' : '#4CAF50' }
+                    { color: percentageChange >= 0 ? '#F44336' : '#008000' }
                   ]}>
                     {percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(1)}%
                   </Text>
@@ -364,29 +364,48 @@ export default function ConsumptionScreen() {
                 // Monthly comparison bars
                 <View style={styles.chartContainer}>
                   <View style={styles.barChart}>
-                    <View style={styles.barWrapper}>
-                      <Text style={styles.barValue}>
-                        {formatEnergyValue(comparison.previousValue ?? 0)}
-                      </Text>
-                      <View style={[styles.bar, styles.previousBar, {
-                        height: (comparison.previousValue ?? 0) > 0 ? '60%' : '10%'
-                      }]} />
-                      <Text style={styles.barLabel}>
-                        {formatDate(comparison.previousTimestamp)}
-                      </Text>
-                    </View>
-                    
-                    <View style={styles.barWrapper}>
-                      <Text style={styles.barValue}>
-                        {formatEnergyValue(currentValue ?? 0)}
-                      </Text>
-                      <View style={[styles.bar, styles.currentBar, {
-                        height: (currentValue ?? 0) > 0 ? '80%' : '10%'
-                      }]} />
-                      <Text style={styles.barLabel}>
-                        {formatDate(comparison.currentTimestamp)}
-                      </Text>
-                    </View>
+                    {(() => {
+                      const prevValue = comparison.previousValue ?? 0;
+                      const currValue = currentValue ?? 0;
+                      const maxValue = Math.max(prevValue, currValue, 1); // En az 1 olmalı, 0'a bölmeyi önlemek için
+                      
+                      // Yükseklikleri piksel cinsinden hesapla (maksimum yükseklik 150px)
+                      const maxBarHeight = 150;
+                      const prevBarHeight = prevValue > 0 
+                        ? Math.max((prevValue / maxValue) * maxBarHeight, 5) 
+                        : 0;
+                      const currBarHeight = currValue > 0 
+                        ? Math.max((currValue / maxValue) * maxBarHeight, 5) 
+                        : 0;
+                      
+                      return (
+                        <>
+                          <View style={styles.barWrapper}>
+                            <Text style={styles.barValue}>
+                              {formatEnergyValue(prevValue)}
+                            </Text>
+                            <View style={[styles.bar, styles.previousBar, {
+                              height: prevBarHeight
+                            }]} />
+                            <Text style={styles.barLabel}>
+                              {formatDate(comparison.previousTimestamp)}
+                            </Text>
+                          </View>
+                          
+                          <View style={styles.barWrapper}>
+                            <Text style={styles.barValue}>
+                              {formatEnergyValue(currValue)}
+                            </Text>
+                            <View style={[styles.bar, styles.currentBar, {
+                              height: currBarHeight
+                            }]} />
+                            <Text style={styles.barLabel}>
+                              {formatDate(comparison.currentTimestamp)}
+                            </Text>
+                          </View>
+                        </>
+                      );
+                    })()}
                   </View>
                 </View>
               ) : (
@@ -742,7 +761,6 @@ const styles = StyleSheet.create({
     width: '15%',
     marginVertical: 8,
     borderRadius: 4,
-    minHeight: 20,
   },
   previousBar: {
     backgroundColor: '#9cf990ff',
