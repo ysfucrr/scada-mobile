@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Alert,
   Animated,
@@ -9,13 +10,15 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  ToastAndroid,
+  Platform
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme as usePaperTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Components
-import AnalyzerCard from '../components/AnalyzerCard';
 import GradientCard from '../components/GradientCard';
 import LogCard from '../components/LogCard';
 
@@ -59,6 +62,8 @@ export default function LogsScreen() {
   const [selectedAnalyzerId, setSelectedAnalyzerId] = useState<string | null>(null);
   const [selectedTrendLog, setSelectedTrendLog] = useState<TrendLogData | null>(null);
   const [viewMode, setViewMode] = useState<'analyzers' | 'logs' | 'entries'>('analyzers');
+  const [draggedAnalyzerIndex, setDraggedAnalyzerIndex] = useState<number | undefined>(undefined);
+  const [analyzerOrder, setAnalyzerOrder] = useState<string[]>([]);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -72,6 +77,14 @@ export default function LogsScreen() {
       setIsLoading(false);
     }
   }, [isConnected]);
+  
+  // Kullanıcıya analizörleri sürükleme özelliğini bildirmek için
+  useEffect(() => {
+    if (analyzerOrder.length > 1 && viewMode === 'analyzers' && !isLoading) {
+      // Yalnızca birden fazla analizör olduğunda bildirim göster
+      showDragInfo();
+    }
+  }, [analyzerOrder.length, viewMode, isLoading]);
 
   const loadTrendLogs = async () => {
     try {
@@ -87,6 +100,22 @@ export default function LogsScreen() {
         }
         grouped.get(analyzerId)!.push(log);
       });
+      
+      // Kaydedilmiş analizör sıralamasını kontrol et
+      try {
+        const savedOrder = await AsyncStorage.getItem('logs_analyzer_order');
+        if (savedOrder) {
+          const orderIds = JSON.parse(savedOrder);
+          setAnalyzerOrder(orderIds);
+        } else {
+          // İlk kez için varsayılan sıralama oluştur
+          setAnalyzerOrder(Array.from(grouped.keys()));
+        }
+      } catch (error) {
+        console.log('Analizör sıralaması yüklenirken hata:', error);
+        // Hata durumunda varsayılan sıralama kullan
+        setAnalyzerOrder(Array.from(grouped.keys()));
+      }
       
       setGroupedLogs(grouped);
     } catch (error) {
@@ -273,6 +302,48 @@ export default function LogsScreen() {
     });
   };
 
+  // Analizör sürükleme başladığında çağrılır
+  const handleAnalyzerLongPress = useCallback((index: number) => {
+    setDraggedAnalyzerIndex(index);
+    
+    // Android cihazlarda bir bildirim göster
+    if (Platform.OS === 'android') {
+      ToastAndroid.showWithGravityAndOffset(
+        'Bırakmak istediğiniz konuma sürükleyin',
+        ToastAndroid.SHORT,
+        ToastAndroid.BOTTOM,
+        0,
+        100
+      );
+    }
+  }, []);
+  
+  // Analizör bırakıldığında çağrılır
+  const handleAnalyzerDrop = useCallback(async (targetIndex: number) => {
+    if (draggedAnalyzerIndex === undefined || draggedAnalyzerIndex === targetIndex) {
+      setDraggedAnalyzerIndex(undefined);
+      return;
+    }
+
+    // Sürüklenen analizörün yeni konumunu hesaplama
+    const newOrder = [...analyzerOrder];
+    const [draggedItem] = newOrder.splice(draggedAnalyzerIndex, 1);
+    newOrder.splice(targetIndex, 0, draggedItem);
+    
+    // Yeni sıralamayı güncelle
+    setAnalyzerOrder(newOrder);
+    
+    // Yeni sıralamayı kalıcı olarak kaydetme
+    try {
+      await AsyncStorage.setItem('logs_analyzer_order', JSON.stringify(newOrder));
+    } catch (error) {
+      console.error('Analizör sıralaması kaydedilirken hata:', error);
+    }
+    
+    // Sürüklemeyi sonlandır
+    setDraggedAnalyzerIndex(undefined);
+  }, [draggedAnalyzerIndex, analyzerOrder]);
+
   const getAnalyzerStats = (analyzerId: string) => {
     const analyzerLogs = groupedLogs.get(analyzerId) || [];
     const runningCount = analyzerLogs.filter(log => log.status === 'running').length;
@@ -417,7 +488,114 @@ export default function LogsScreen() {
     );
   }
 
+  const renderAnalyzerItem = ({ item, index }: { item: [string, TrendLogData[]], index: number }) => {
+    const [analyzerId, analyzerLogs] = item;
+    const firstLog = analyzerLogs[0];
+    const stats = getAnalyzerStats(analyzerId);
+    const isBeingDragged = draggedAnalyzerIndex === index;
+    
+    return (
+      <TouchableOpacity
+        onLongPress={() => handleAnalyzerLongPress(index)}
+        onPress={draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index
+          ? () => handleAnalyzerDrop(index)
+          : () => handleAnalyzerSelect(analyzerId)
+        }
+        activeOpacity={0.9}
+        delayLongPress={300}
+      >
+        <View style={styles.cardWrapper}>
+          <GradientCard
+            colors={['#1E88E5', '#42A5F5']}
+            style={{
+              ...styles.analyzerCard,
+              ...(isBeingDragged ? styles.beingDragged : {}),
+              ...(draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index ? styles.dropTarget : {})
+            }}
+            mode="elevated"
+          >
+          <BlurView
+            intensity={isDarkMode ? 20 : 15}
+            tint={isDarkMode ? "dark" : "light"}
+            style={styles.blurContainer}
+          >
+            <View style={styles.analyzerContent}>
+              {/* Header */}
+              <View style={styles.analyzerHeader}>
+                <View style={styles.iconWrapper}>
+                  <MaterialCommunityIcons
+                    name="chart-line"
+                    size={24}
+                    color="white"
+                  />
+                </View>
+                <View style={styles.analyzerInfo}>
+                  <Text style={styles.analyzerName}>
+                    {firstLog.analyzerName || `Analyzer ${analyzerId}`}
+                  </Text>
+                  <Text style={styles.buildingName}>
+                    {firstLog.buildingName || 'Unknown Building'}
+                  </Text>
+                </View>
+                {stats.running > 0 && (
+                  <View style={styles.liveBadge}>
+                    <View style={styles.pulseIndicator} />
+                    <Text style={styles.liveText}>RUNNING</Text>
+                  </View>
+                )}
+              </View>
+              
+              {/* Stats */}
+              <View style={styles.statsContainer}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>
+                    {stats.total}
+                  </Text>
+                  <Text style={styles.statLabel}>
+                    Total Logs
+                  </Text>
+                </View>
+                
+                <View style={[styles.statCard, stats.running > 0 && styles.liveStatCard]}>
+                  <Text style={[styles.statValue, stats.running > 0 && styles.liveStatValue]}>
+                    {stats.running}
+                  </Text>
+                  <Text style={styles.statLabel}>
+                    Running
+                  </Text>
+                </View>
+              </View>
+              
+              {/* Footer */}
+              <View style={styles.analyzerFooter}>
+                <Text style={styles.tapHint}>View logs</Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={18}
+                  color="rgba(255,255,255,0.8)"
+                />
+              </View>
+            </View>
+          </BlurView>
+        </GradientCard>
+      </View>
+    </TouchableOpacity>
+    );
+  };
+
   // Default analyzer view
+  // Analizörleri kaydedilmiş sıralamaya göre düzenle
+  const sortedAnalyzers = analyzerOrder
+    .filter(id => groupedLogs.has(id))
+    .map(id => [id, groupedLogs.get(id)!] as [string, TrendLogData[]]);
+  
+  // Sıralama listesinde olmayan analizörleri ekle
+  Array.from(groupedLogs.keys()).forEach(id => {
+    if (!analyzerOrder.includes(id)) {
+      sortedAnalyzers.push([id, groupedLogs.get(id)!]);
+    }
+  });
+  
   return (
     <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
@@ -430,21 +608,8 @@ export default function LogsScreen() {
         }}
       >
         <FlatList
-        data={Array.from(groupedLogs.entries())}
-        renderItem={({ item }) => {
-          const [analyzerId, analyzerLogs] = item;
-          const firstLog = analyzerLogs[0];
-          
-          return (
-            <AnalyzerCard
-              analyzerId={analyzerId}
-              analyzerName={firstLog.analyzerName}
-              buildingName={firstLog.buildingName}
-              stats={getAnalyzerStats(analyzerId)}
-              onPress={() => handleAnalyzerSelect(analyzerId)}
-            />
-          );
-        }}
+        data={sortedAnalyzers}
+        renderItem={renderAnalyzerItem}
         keyExtractor={(item) => item[0]}
         contentContainerStyle={styles.content}
         refreshControl={
@@ -470,6 +635,19 @@ export default function LogsScreen() {
   );
 }
 
+// Kullanıcıya analizör sürükleme özelliğini bildirmek için toast
+const showDragInfo = () => {
+  if (Platform.OS === 'android') {
+    ToastAndroid.showWithGravityAndOffset(
+      'Analizörleri sıralamak için uzun basın ve sürükleyin',
+      ToastAndroid.LONG,
+      ToastAndroid.BOTTOM,
+      0,
+      100
+    );
+  }
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -482,6 +660,133 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  cardWrapper: {
+    marginVertical: 4,
+    marginHorizontal: 0,
+  },
+  analyzerCard: {
+    elevation: 3,
+    marginBottom: 12,
+  },
+  blurContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  analyzerContent: {
+    padding: 16,
+  },
+  analyzerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  iconWrapper: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 12,
+    padding: 8,
+    marginRight: 12,
+  },
+  analyzerInfo: {
+    flex: 1,
+  },
+  analyzerName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: 'white',
+    marginBottom: 2,
+  },
+  buildingName: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  liveBadge: {
+    backgroundColor: '#4CAF50',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  pulseIndicator: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: 'white',
+    marginRight: 3,
+  },
+  liveText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'white',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  liveStatCard: {
+    backgroundColor: 'rgba(76, 175, 80, 0.25)',
+    borderColor: 'rgba(76, 175, 80, 0.5)',
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: 'white',
+    marginBottom: 2,
+  },
+  liveStatValue: {
+    color: '#dfe4e0ff',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  analyzerFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  tapHint: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  beingDragged: {
+    opacity: 0.85,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 15,
+    transform: [{ scale: 1.05 }],
+  },
+  dropTarget: {
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderStyle: 'dashed',
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   
   // Not Connected Styles

@@ -2,10 +2,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
@@ -24,7 +25,7 @@ import { useWebSocket } from '../context/WebSocketContext';
 import ApiService from '../services/ApiService';
 import AuthService from '../services/AuthService';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 // Theme configuration
 const theme = {
@@ -73,7 +74,74 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
 
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const logoScaleAnim = useRef(new Animated.Value(0)).current;
+  const logoRotateAnim = useRef(new Animated.Value(0)).current;
+  const formOpacityAnim = useRef(new Animated.Value(0)).current;
+  const backgroundPulseAnim = useRef(new Animated.Value(1)).current;
+
   useEffect(() => {
+    // Start animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.spring(logoScaleAnim, {
+        toValue: 1,
+        tension: 40,
+        friction: 6,
+        useNativeDriver: true,
+      }),
+      Animated.timing(formOpacityAnim, {
+        toValue: 1,
+        duration: 600,
+        delay: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Logo rotation animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(logoRotateAnim, {
+          toValue: 1,
+          duration: 3000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(logoRotateAnim, {
+          toValue: 0,
+          duration: 3000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Background pulse animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(backgroundPulseAnim, {
+          toValue: 1.05,
+          duration: 3000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(backgroundPulseAnim, {
+          toValue: 1,
+          duration: 3000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
     // Clear any previously selected agent before loading the login screen
     const clearPreviousAgent = async () => {
       console.log('[LoginScreen] Clearing any previous agent selection on screen load');
@@ -234,11 +302,36 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
     );
   }
 
+  // Interpolated values for animations
+  const logoRotate = logoRotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-5deg', '5deg'],
+  });
+
   return (
-    <LinearGradient
-      colors={['#F5F8FA', '#E3F2FD']}
-      style={styles.container}
-    >
+    <View style={styles.container}>
+      {/* Top Blue Section - Limited to upper portion */}
+      <Animated.View 
+        style={[
+          styles.topBlueSection,
+          { transform: [{ scale: backgroundPulseAnim }] }
+        ]}
+      >
+        <LinearGradient
+          colors={['#0D47A1', '#1565C0', '#1E88E5', '#42A5F5']}
+          style={StyleSheet.absoluteFillObject}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        {/* Decorative Circles */}
+        <View style={styles.decorativeCircle1} />
+        <View style={styles.decorativeCircle2} />
+        <View style={styles.decorativeCircle3} />
+      </Animated.View>
+
+      {/* Bottom White Section */}
+      <View style={styles.bottomWhiteSection} />
+
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -247,44 +340,95 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.content}>
-            {/* Modern Logo Section */}
-            <View style={styles.logoContainer}>
+          <Animated.View 
+            style={[
+              styles.content,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+              },
+            ]}
+          >
+            {/* Modern Logo Section with Animation */}
+            <Animated.View 
+              style={[
+                styles.logoContainer,
+                {
+                  transform: [
+                    { scale: logoScaleAnim },
+                    { rotate: logoRotate },
+                  ],
+                },
+              ]}
+            >
               <View style={styles.logoWrapper}>
                 <LinearGradient
-                  colors={theme.colors.gradient as [string, string, ...string[]]}
+                  colors={['#1E88E5', '#42A5F5', '#90CAF9'] as [string, string, ...string[]]}
                   style={styles.logoGradient}
                 >
+                  <View style={styles.logoInnerGlow} />
                   <MaterialCommunityIcons 
                     name="shield-check" 
-                    size={60} 
+                    size={64} 
                     color="#FFFFFF" 
                   />
                 </LinearGradient>
+                {/* Outer glow ring */}
+                <View style={styles.logoGlowRing} />
               </View>
-              <Text style={styles.title}>SCADA Mobile</Text>
-              <Text style={styles.subtitle}>Industrial Control System</Text>
-            </View>
+              <Animated.Text style={[styles.title, { opacity: fadeAnim }]}>
+                SCADA Mobile
+              </Animated.Text>
+              <Animated.Text style={[styles.subtitle, { opacity: fadeAnim }]}>
+                Industrial Control System
+              </Animated.Text>
+            </Animated.View>
 
-            {/* Modern Form Container */}
-            <View style={styles.formContainer}>
+            {/* Modern Form Container with Animation */}
+            <Animated.View 
+              style={[
+                styles.formContainer,
+                {
+                  opacity: formOpacityAnim,
+                  transform: [
+                    {
+                      translateY: formOpacityAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [20, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
               <BlurView
-                intensity={100}
+                intensity={80}
                 tint="light"
                 style={styles.blurContainer}
               >
                 <View style={styles.formContent}>
-                  {/* Username Input */}
+                  {/* Welcome Text */}
+                  <View style={styles.welcomeSection}>
+                    <Text style={styles.welcomeTitle}>Welcome Back</Text>
+                    <Text style={styles.welcomeSubtitle}>Sign in to continue</Text>
+                  </View>
+                  {/* Username Input - Modern Design */}
                   <View style={styles.inputWrapper}>
-                    <View style={styles.inputContainer}>
-                      <MaterialCommunityIcons 
-                        name="account-outline" 
-                        size={22} 
-                        color={theme.colors.text.secondary} 
-                      />
+                    <Text style={styles.inputLabel}>Username</Text>
+                    <View style={[
+                      styles.inputContainer,
+                      username ? styles.inputContainerFocused : null
+                    ]}>
+                      <View style={styles.inputIconContainer}>
+                        <MaterialCommunityIcons 
+                          name="account-outline" 
+                          size={24} 
+                          color={username ? theme.colors.primary : theme.colors.text.secondary} 
+                        />
+                      </View>
                       <TextInput
                         style={styles.input}
-                        placeholder="Username"
+                        placeholder="Enter your username"
                         placeholderTextColor={theme.colors.text.secondary}
                         value={username}
                         onChangeText={setUsername}
@@ -294,17 +438,23 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
                     </View>
                   </View>
 
-                  {/* Password Input */}
+                  {/* Password Input - Modern Design */}
                   <View style={styles.inputWrapper}>
-                    <View style={styles.inputContainer}>
-                      <MaterialCommunityIcons
-                        name="lock-outline"
-                        size={22}
-                        color={theme.colors.text.secondary}
-                      />
+                    <Text style={styles.inputLabel}>Password</Text>
+                    <View style={[
+                      styles.inputContainer,
+                      password ? styles.inputContainerFocused : null
+                    ]}>
+                      <View style={styles.inputIconContainer}>
+                        <MaterialCommunityIcons
+                          name="lock-outline"
+                          size={24}
+                          color={password ? theme.colors.primary : theme.colors.text.secondary}
+                        />
+                      </View>
                       <TextInput
                         style={styles.input}
-                        placeholder="Password"
+                        placeholder="Enter your password"
                         placeholderTextColor={theme.colors.text.secondary}
                         value={password}
                         onChangeText={setPassword}
@@ -315,36 +465,41 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
                       <TouchableOpacity
                         onPress={() => setShowPassword(!showPassword)}
                         style={styles.eyeButton}
+                        activeOpacity={0.7}
                       >
                         <MaterialCommunityIcons
                           name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                           size={22}
-                          color={theme.colors.text.secondary}
+                          color={password ? theme.colors.primary : theme.colors.text.secondary}
                         />
                       </TouchableOpacity>
                     </View>
                   </View>
                   
-                  {/* SCADA System Selector */}
+                  {/* SCADA System Selector - Modern Design */}
                   {agents.length > 0 && (
                     <View style={styles.inputWrapper}>
+                      <Text style={styles.inputLabel}>SCADA System</Text>
                       <TouchableOpacity
                         style={[
                           styles.inputContainer,
+                          styles.agentSelectorContainer,
                           selectedAgent ? styles.selectedInputContainer : null
                         ]}
                         onPress={async () => {
-                          // Modal açılmadan önce agent listesini yenile
                           console.log('[LoginScreen] Refreshing agent list before opening modal');
                           await fetchAvailableAgents();
                           setShowAgentSelector(true);
                         }}
+                        activeOpacity={0.7}
                       >
-                        <MaterialCommunityIcons
-                          name="server-network"
-                          size={22}
-                          color={theme.colors.text.secondary}
-                        />
+                        <View style={styles.inputIconContainer}>
+                          <MaterialCommunityIcons
+                            name="server-network"
+                            size={24}
+                            color={selectedAgent ? theme.colors.primary : theme.colors.text.secondary}
+                          />
+                        </View>
                         <Text
                           style={[
                             styles.input,
@@ -362,40 +517,60 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
                     </View>
                   )}
 
-                  {/* Remember Me */}
+                  {/* Remember Me - Modern Toggle */}
                   <View style={styles.rememberContainer}>
-                    <Text style={styles.rememberText}>Remember Me</Text>
+                    <View style={styles.rememberContent}>
+                      <MaterialCommunityIcons 
+                        name="bookmark-outline" 
+                        size={18} 
+                        color={rememberMe ? theme.colors.primary : theme.colors.text.secondary} 
+                        style={styles.rememberIcon}
+                      />
+                      <Text style={[
+                        styles.rememberText,
+                        rememberMe && styles.rememberTextActive
+                      ]}>
+                        Remember Me
+                      </Text>
+                    </View>
                     <Switch
                       value={rememberMe}
                       onValueChange={setRememberMe}
                       trackColor={{ 
-                        false: theme.colors.border, 
-                        true: theme.colors.primary + '50' 
+                        false: 'rgba(0,0,0,0.1)', 
+                        true: theme.colors.primary + '40' 
                       }}
-                      thumbColor={rememberMe ? theme.colors.primary : '#f4f3f4'}
-                      ios_backgroundColor={theme.colors.border}
+                      thumbColor={rememberMe ? theme.colors.primary : '#FFFFFF'}
+                      ios_backgroundColor="rgba(0,0,0,0.1)"
                     />
                   </View>
 
-                  {/* Login Button */}
+                  {/* Login Button - Premium Design */}
                   <TouchableOpacity
                     style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
                     onPress={handleLogin}
                     disabled={isLoading}
-                    activeOpacity={0.8}
+                    activeOpacity={0.9}
                   >
                     <LinearGradient
-                      colors={isLoading ? ['#BDBDBD', '#9E9E9E'] as [string, string] : theme.colors.gradient as [string, string]}
+                      colors={
+                        isLoading 
+                          ? ['#BDBDBD', '#9E9E9E'] as [string, string]
+                          : ['#1E88E5', '#1565C0', '#0D47A1'] as [string, string, ...string[]]
+                      }
                       style={styles.loginButtonGradient}
                       start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
+                      end={{ x: 1, y: 1 }}
                     >
                       {isLoading ? (
-                        <ActivityIndicator color="#fff" />
+                        <View style={styles.loadingButtonContent}>
+                          <ActivityIndicator color="#fff" size="small" />
+                          <Text style={styles.loginButtonText}>Signing In...</Text>
+                        </View>
                       ) : (
                         <>
                           <MaterialCommunityIcons 
-                            name="login" 
+                            name="login-variant" 
                             size={24} 
                             color="#FFFFFF" 
                             style={styles.loginIcon}
@@ -406,19 +581,21 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
                     </LinearGradient>
                   </TouchableOpacity>
 
-                  {/* Security Badge */}
+                  {/* Security Badge - Enhanced */}
                   <View style={styles.securityBadge}>
-                    <MaterialCommunityIcons 
-                      name="shield-lock-outline" 
-                      size={16} 
-                      color={theme.colors.success} 
-                    />
-                    <Text style={styles.securityText}>Secure Connection</Text>
+                    <View style={styles.securityBadgeContent}>
+                      <MaterialCommunityIcons 
+                        name="shield-check" 
+                        size={18} 
+                        color={theme.colors.success} 
+                      />
+                      <Text style={styles.securityText}>End-to-End Encrypted</Text>
+                    </View>
                   </View>
                 </View>
               </BlurView>
-            </View>
-          </View>
+            </Animated.View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
       
@@ -433,8 +610,16 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select SCADA System</Text>
-              <TouchableOpacity onPress={() => setShowAgentSelector(false)}>
-                <MaterialCommunityIcons name="close" size={24} color="#000" />
+              <TouchableOpacity 
+                onPress={() => setShowAgentSelector(false)}
+                style={styles.modalCloseButton}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons 
+                  name="close-circle" 
+                  size={28} 
+                  color={theme.colors.text.secondary} 
+                />
               </TouchableOpacity>
             </View>
             
@@ -517,169 +702,337 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
           </View>
         </View>
       </Modal>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    position: 'relative',
+    backgroundColor: '#F5F8FA',
+  },
+  // Top Blue Section - Limited height
+  topBlueSection: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: height * 0.40, // Mavi alan ekranın %40'ını kaplıyor
+    overflow: 'hidden',
+    zIndex: 0,
+  },
+  // Bottom White Section
+  bottomWhiteSection: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: height * 0.40, // Mavi alanın altından başlıyor
+    backgroundColor: '#F5F8FA',
+    zIndex: 0,
   },
   keyboardView: {
     flex: 1,
+    zIndex: 1,
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#0D47A1',
   },
   loadingText: {
     marginTop: 16,
-    color: theme.colors.text.secondary,
+    color: '#FFFFFF',
     fontSize: 16,
+    fontWeight: '500',
+  },
+  // Decorative elements
+  decorativeCircle1: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    top: -100,
+    right: -50,
+  },
+  decorativeCircle2: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    bottom: -50,
+    left: -30,
+  },
+  decorativeCircle3: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    top: height * 0.15,
+    right: 20,
   },
   content: {
-    flex: 1,
-    justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 40,
+    paddingTop: height * 0.20, // Logo mavi ve beyaz arasında görünsün
+    paddingBottom: 40,
+    zIndex: 1,
   },
+  // Logo styles
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 24,
   },
   logoWrapper: {
-    marginBottom: 20,
+    marginBottom: 24,
+    position: 'relative',
   },
   logoGradient: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#1E88E5',
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  logoInnerGlow: {
+    position: 'absolute',
     width: 120,
     height: 120,
     borderRadius: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: theme.colors.primary,
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  logoGlowRing: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    top: -10,
+    left: -10,
   },
   title: {
     fontSize: 32,
-    fontWeight: '700',
-    color: theme.colors.text.primary,
+    fontWeight: '800',
+    color: '#212121', // Beyaz arka plan üzerinde siyah
     marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: theme.colors.text.secondary,
+    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
     letterSpacing: 0.5,
   },
+  subtitle: {
+    fontSize: 15,
+    color: '#757575', // Beyaz arka plan üzerinde gri
+    letterSpacing: 0.6,
+    fontWeight: '400',
+  },
+  // Form styles
   formContainer: {
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 8,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   blurContainer: {
-    borderRadius: 24,
+    borderRadius: 28,
   },
   formContent: {
-    padding: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    padding: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
   },
+  // Welcome section
+  welcomeSection: {
+    marginBottom: 28,
+    alignItems: 'center',
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: theme.colors.text.primary,
+    marginBottom: 6,
+  },
+  welcomeSubtitle: {
+    fontSize: 15,
+    color: theme.colors.text.secondary,
+    fontWeight: '400',
+  },
+  // Input styles
   inputWrapper: {
-    marginBottom: 20,
+    marginBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text.primary,
+    marginBottom: 8,
+    paddingLeft: 4,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(245, 248, 250, 0.8)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 56,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    backgroundColor: 'rgba(245, 248, 250, 0.9)',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    height: 60,
+    borderWidth: 2,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  inputContainerFocused: {
+    borderColor: theme.colors.primary,
+    backgroundColor: 'rgba(30, 136, 229, 0.05)',
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  inputIconContainer: {
+    marginRight: 12,
+    width: 32,
+    alignItems: 'center',
+  },
+  input: {
+    flex: 1,
+    color: theme.colors.text.primary,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  placeholderText: {
+    color: theme.colors.text.secondary,
+    fontWeight: '400',
+  },
+  agentSelectorContainer: {
+    justifyContent: 'space-between',
   },
   selectedInputContainer: {
     borderColor: theme.colors.primary,
     borderWidth: 2,
-  },
-  input: {
-    flex: 1,
-    marginLeft: 12,
-    color: theme.colors.text.primary,
-    fontSize: 16,
-  },
-  placeholderText: {
-    color: theme.colors.text.secondary,
+    backgroundColor: 'rgba(30, 136, 229, 0.08)',
   },
   eyeButton: {
-    padding: 4,
+    padding: 8,
+    marginLeft: 8,
   },
+  // Remember Me styles
   rememberContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 32,
     paddingHorizontal: 4,
+    paddingVertical: 8,
+  },
+  rememberContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rememberIcon: {
+    marginRight: 8,
   },
   rememberText: {
     color: theme.colors.text.primary,
     fontSize: 16,
     fontWeight: '500',
   },
+  rememberTextActive: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  // Login button styles
   loginButton: {
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    marginBottom: 20,
+    marginBottom: 24,
+    shadowColor: theme.colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   loginButtonDisabled: {
     opacity: 0.7,
   },
   loginButtonGradient: {
     flexDirection: 'row',
-    height: 56,
+    height: 60,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
+  },
+  loadingButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   loginIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   loginButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
+  // Security badge
   securityBadge: {
-    flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
+    marginTop: 8,
+  },
+  securityBadgeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    borderRadius: 20,
   },
   securityText: {
     color: theme.colors.success,
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
-  // Agent Selector Modal Styles
+  // Agent Selector Modal Styles - Modern Design
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -687,98 +1040,128 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '100%',
     backgroundColor: 'white',
-    borderRadius: 16,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
-    maxHeight: '80%',
+    borderRadius: 24,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    paddingBottom: 16,
+    borderBottomColor: 'rgba(0, 0, 0, 0.08)',
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '700',
     color: theme.colors.text.primary,
+    letterSpacing: 0.3,
+  },
+  modalCloseButton: {
+    padding: 4,
+    borderRadius: 20,
   },
   loadingAgentsContainer: {
-    padding: 40,
+    padding: 60,
     alignItems: 'center',
     justifyContent: 'center',
   },
   loadingAgentsText: {
-    marginTop: 16,
+    marginTop: 20,
     color: theme.colors.text.secondary,
     fontSize: 16,
+    fontWeight: '500',
   },
   noAgentsContainer: {
-    padding: 40,
+    padding: 60,
     alignItems: 'center',
     justifyContent: 'center',
   },
   noAgentsText: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: '600',
+    marginTop: 24,
+    fontSize: 20,
+    fontWeight: '700',
     color: theme.colors.text.primary,
+    marginBottom: 8,
   },
   noAgentsSubText: {
-    marginTop: 8,
-    fontSize: 14,
+    fontSize: 15,
     color: theme.colors.text.secondary,
-    marginBottom: 24,
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 22,
   },
   refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+    shadowColor: theme.colors.primary,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   refreshButtonText: {
     color: 'white',
-    marginLeft: 8,
-    fontSize: 14,
-    fontWeight: '600',
+    marginLeft: 10,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   agentList: {
-    paddingBottom: 16,
+    paddingBottom: 20,
   },
   agentItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    marginVertical: 4,
+    backgroundColor: 'rgba(245, 248, 250, 0.5)',
   },
   selectedAgentItem: {
     backgroundColor: `${theme.colors.primary}15`,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
   },
   agentItemContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   agentItemText: {
-    marginLeft: 12,
+    marginLeft: 16,
     flex: 1,
   },
   agentItemName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: theme.colors.text.primary,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   agentItemInfo: {
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.text.secondary,
+    fontWeight: '400',
   },
   separator: {
     height: 1,
-    backgroundColor: theme.colors.border,
-    marginVertical: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    marginVertical: 8,
   },
 });

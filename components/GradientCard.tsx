@@ -51,26 +51,40 @@ const GradientCard: React.FC<GradientCardProps> = ({
           onPressOut={handlePressOut}
         >
           <View>
-            <Card style={[styles.card, style]} mode={mode}>
-              <View style={styles.overflowWrapper}>
-                <LinearGradient
-                  colors={colors}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.gradient}
+            {(() => {
+              const { overflow, ...cardStyle } = style || {};
+              return (
+                <Card 
+                  style={[styles.card, cardStyle]} 
+                  mode={mode}
                 >
-                  {children}
-                </LinearGradient>
-              </View>
-            </Card>
+                  <View style={styles.overflowWrapper}>
+                    <LinearGradient
+                      colors={colors}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.gradient}
+                    >
+                      {children}
+                    </LinearGradient>
+                  </View>
+                </Card>
+              );
+            })()}
           </View>
         </TouchableWithoutFeedback>
       </Animated.View>
     );
   }
   
+  // Extract overflow from style if present
+  const { overflow, ...cardStyle } = style || {};
+  
   return (
-    <Card style={[styles.card, style]} mode={mode}>
+    <Card 
+      style={[styles.card, cardStyle]} 
+      mode={mode}
+    >
       <View style={styles.overflowWrapper}>
         <LinearGradient
           colors={colors}

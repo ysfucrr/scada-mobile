@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Alert,
   Animated,
@@ -12,8 +12,11 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  ToastAndroid,
+  Platform
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card, useTheme as usePaperTheme } from 'react-native-paper';
 import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
@@ -67,6 +70,8 @@ export default function ConsumptionScreen() {
   const [widgetMonthlyData, setWidgetMonthlyData] = useState<Map<string, any>>(new Map());
   const [widgetYearlyData, setWidgetYearlyData] = useState<Map<string, any>>(new Map());
   const [liveValues, setLiveValues] = useState<Map<string, number>>(new Map());
+  const [draggedWidgetIndex, setDraggedWidgetIndex] = useState<number | undefined>(undefined);
+  const [widgetOrder, setWidgetOrder] = useState<string[]>([]);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -97,6 +102,14 @@ export default function ConsumptionScreen() {
       setIsLoading(false);
     }
   }, [isConnected, wsConnected]);
+  
+  // Kullanıcıya widget'ları sürükleme özelliğini bildirmek için
+  useEffect(() => {
+    if (widgets.length > 1 && !isLoading) {
+      // Yalnızca birden fazla widget olduğunda bildirim göster
+      showDragInfo();
+    }
+  }, [widgets.length, isLoading]);
 
   // Watch registers for live data when time filter is month
   useEffect(() => {
@@ -156,7 +169,58 @@ export default function ConsumptionScreen() {
   const loadWidgets = async () => {
     try {
       const data = await ApiService.getConsumptionWidgets();
-      setWidgets(data);
+      
+      // Kayıtlı widget sıralamasını kontrol et
+      try {
+        const savedOrder = await AsyncStorage.getItem('consumption_widget_order');
+        if (savedOrder) {
+          const orderIds = JSON.parse(savedOrder);
+          
+          // Kaydedilmiş sıralamaya göre widget'ları düzenle
+          const orderedWidgets = [...data];
+          
+          // Önce sıralamayı kaydet
+          setWidgetOrder(orderIds);
+          
+          // Sıralamaya göre düzenleme
+          if (orderIds.length > 0) {
+            // Sıralı widget listesi oluştur
+            const sortedWidgets: ConsumptionWidget[] = [];
+            
+            // Ordered ID'lere göre widget'ları sırala
+            orderIds.forEach((id: string) => {
+              const widget = data.find(w => w._id === id);
+              if (widget) {
+                sortedWidgets.push(widget);
+              }
+            });
+            
+            // Sıralamada olmayan widget'ları ekle
+            data.forEach(widget => {
+              if (!orderIds.includes(widget._id)) {
+                sortedWidgets.push(widget);
+              }
+            });
+            
+            // Sıralanmış widget'lar varsa güncelle
+            if (sortedWidgets.length > 0) {
+              setWidgets(sortedWidgets);
+            } else {
+              setWidgets(data);
+            }
+          } else {
+            setWidgets(data);
+          }
+        } else {
+          // Kaydedilmiş sıralama yoksa varsayılan sıralama kullan
+          setWidgets(data);
+          setWidgetOrder(data.map(widget => widget._id));
+        }
+      } catch (error) {
+        console.log('Widget sıralaması yüklenirken hata:', error);
+        setWidgets(data);
+        setWidgetOrder(data.map(widget => widget._id));
+      }
       
       // Load both monthly and yearly data for all widgets
       await loadAllWidgetData(data);
@@ -235,6 +299,52 @@ export default function ConsumptionScreen() {
     // Simply change the filter, data is already loaded
     setSelectedTimeFilter(filter);
   };
+  
+  // Widget sürükleme başladığında çağrılır
+  const handleWidgetLongPress = useCallback((index: number) => {
+    setDraggedWidgetIndex(index);
+    
+    // Android cihazlarda bir bildirim göster
+    if (Platform.OS === 'android') {
+      ToastAndroid.showWithGravityAndOffset(
+        'Bırakmak istediğiniz konuma sürükleyin',
+        ToastAndroid.SHORT,
+        ToastAndroid.BOTTOM,
+        0,
+        100
+      );
+    }
+  }, []);
+  
+  // Widget bırakıldığında çağrılır
+  const handleWidgetDrop = useCallback(async (targetIndex: number) => {
+    if (draggedWidgetIndex === undefined || draggedWidgetIndex === targetIndex) {
+      setDraggedWidgetIndex(undefined);
+      return;
+    }
+
+    // Sürüklenen widget'ı yeni konumuna taşıma
+    const newWidgets = [...widgets];
+    const [draggedWidget] = newWidgets.splice(draggedWidgetIndex, 1);
+    newWidgets.splice(targetIndex, 0, draggedWidget);
+    
+    // Yeni widget listesini güncelle
+    setWidgets(newWidgets);
+    
+    // Sıralama için ID listesini güncelle
+    const newOrder = newWidgets.map(widget => widget._id);
+    setWidgetOrder(newOrder);
+    
+    // Yeni sıralamayı kalıcı olarak kaydetme
+    try {
+      await AsyncStorage.setItem('consumption_widget_order', JSON.stringify(newOrder));
+    } catch (error) {
+      console.error('Widget sıralaması kaydedilirken hata:', error);
+    }
+    
+    // Sürüklemeyi sonlandırma
+    setDraggedWidgetIndex(undefined);
+  }, [draggedWidgetIndex, widgets]);
 
   const formatEnergyValue = (value: number, decimals: number = 1): string => {
     if (value >= 1000) {
@@ -253,7 +363,7 @@ export default function ConsumptionScreen() {
     }
   };
 
-  const renderConsumptionWidget = ({ item }: { item: ConsumptionWidget }) => {
+  const renderConsumptionWidget = ({ item, index }: { item: ConsumptionWidget, index: number }) => {
     // Get data based on selected filter
     const data = selectedTimeFilter === 'month'
       ? widgetMonthlyData.get(item._id)
@@ -302,7 +412,11 @@ export default function ConsumptionScreen() {
       <View style={styles.widgetWrapper}>
         <GradientCard
           colors={['#1E88E5', '#42A5F5']}
-          style={styles.widgetCard}
+          style={{
+            ...styles.widgetCard,
+            ...(draggedWidgetIndex === index ? styles.beingDragged : {}),
+            ...(draggedWidgetIndex !== undefined && draggedWidgetIndex !== index ? styles.dropTarget : {})
+          }}
           mode="elevated"
         >
           <BlurView
@@ -311,21 +425,31 @@ export default function ConsumptionScreen() {
             style={styles.blurContainer}
           >
             <View style={styles.widgetContent}>
-              {/* Header */}
-              <View style={styles.widgetHeader}>
-                <Text style={styles.widgetTitle}>{item.title}</Text>
-                <View style={styles.changeIndicator}>
-                  <Text style={styles.changeLabel}>
-                    {selectedTimeFilter === 'month' ? 'Monthly' : 'Yearly'} Change
-                  </Text>
-                  <Text style={[
-                    styles.changeValue,
-                    { color: percentageChange >= 0 ? '#F44336' : '#008000' }
-                  ]}>
-                    {percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(1)}%
-                  </Text>
+              {/* Header - Sadece bu kısmı sürüklenebilir yapıyoruz */}
+              <TouchableOpacity
+                onLongPress={() => handleWidgetLongPress(index)}
+                onPress={draggedWidgetIndex !== undefined && draggedWidgetIndex !== index
+                  ? () => handleWidgetDrop(index)
+                  : undefined
+                }
+                activeOpacity={0.95}
+                delayLongPress={500}
+              >
+                <View style={styles.widgetHeader}>
+                  <Text style={styles.widgetTitle}>{item.title}</Text>
+                  <View style={styles.changeIndicator}>
+                    <Text style={styles.changeLabel}>
+                      {selectedTimeFilter === 'month' ? 'Monthly' : 'Yearly'} Change
+                    </Text>
+                    <Text style={[
+                      styles.changeValue,
+                      { color: percentageChange >= 0 ? '#F44336' : '#008000' }
+                    ]}>
+                      {percentageChange >= 0 ? '+' : ''}{percentageChange.toFixed(1)}%
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              </TouchableOpacity>
 
               {/* Time Filter */}
               <View style={styles.filterContainer}>
@@ -631,7 +755,39 @@ export default function ConsumptionScreen() {
   );
 }
 
+// Kullanıcıya widget sürükleme özelliğini bildirmek için toast
+const showDragInfo = () => {
+  if (Platform.OS === 'android') {
+    ToastAndroid.showWithGravityAndOffset(
+      "Widgetları sıralamak için uzun basın ve sürükleyin",
+      ToastAndroid.LONG,
+      ToastAndroid.BOTTOM,
+      0,
+      100
+    );
+  }
+};
+
 const styles = StyleSheet.create({
+  beingDragged: {
+    opacity: 0.85,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 16,
+    transform: [{ scale: 1.05 }],
+  },
+  dropTarget: {
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
   container: {
     flex: 1,
   },

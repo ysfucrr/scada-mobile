@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Alert,
   Animated,
@@ -10,8 +10,11 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  ToastAndroid,
+  Platform
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Card, IconButton, useTheme as usePaperTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientCard from '../components/GradientCard';
@@ -46,6 +49,10 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
   const [selectedRegister, setSelectedRegister] = useState<RegisterData | null>(null);
   const [selectedAnalyzerId, setSelectedAnalyzerId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'analyzers' | 'registers'>('analyzers');
+  const [draggedAnalyzerIndex, setDraggedAnalyzerIndex] = useState<number | undefined>(undefined);
+  const [analyzerOrder, setAnalyzerOrder] = useState<string[]>([]);
+  const [draggedRegisterIndex, setDraggedRegisterIndex] = useState<number | undefined>(undefined);
+  const [registerOrder, setRegisterOrder] = useState<string[]>([]);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -62,6 +69,50 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       setIsLoading(false);
     }
   }, [isConnected, wsConnected]);
+  
+  // Kullanıcıya analizörleri sürükleme özelliğini bildirmek için
+  useEffect(() => {
+    if (analyzerOrder.length > 1 && viewMode === 'analyzers' && !isLoading) {
+      // Yalnızca birden fazla analizör olduğunda bildirim göster
+      showDragInfo();
+    }
+  }, [analyzerOrder.length, viewMode, isLoading]);
+
+  // Register sıralamasını yükle - seçili analizör değiştiğinde
+  useEffect(() => {
+    const loadRegisterOrder = async () => {
+      if (!selectedAnalyzerId || viewMode !== 'registers') {
+        return;
+      }
+      
+      const selectedRegisters = groupedRegisters.get(selectedAnalyzerId) || [];
+      if (selectedRegisters.length === 0) {
+        return;
+      }
+      
+      try {
+        const savedOrder = await AsyncStorage.getItem('register_order');
+        if (savedOrder) {
+          const orderIds = JSON.parse(savedOrder);
+          // Sadece seçili analizörün register'larını filtrele
+          const analyzerRegisterIds = selectedRegisters.map(r => r._id);
+          const validOrder = orderIds.filter((id: string) => analyzerRegisterIds.includes(id));
+          
+          // Eksik olanları sona ekle
+          const missingRegisters = analyzerRegisterIds.filter(id => !validOrder.includes(id));
+          setRegisterOrder([...validOrder, ...missingRegisters]);
+        } else {
+          // İlk kez için varsayılan sıralama
+          setRegisterOrder(selectedRegisters.map(r => r._id));
+        }
+      } catch (error) {
+        console.log('Register sıralaması yüklenirken hata:', error);
+        setRegisterOrder(selectedRegisters.map(r => r._id));
+      }
+    };
+    
+    loadRegisterOrder();
+  }, [selectedAnalyzerId, viewMode, groupedRegisters]);
 
   // Register'ları WebSocket'e abone et - sadece ekran aktifken ve seçili analizör için
   useEffect(() => {
@@ -139,6 +190,22 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
         grouped.get(analyzerId)!.push(register);
       });
       
+      // Kaydedilmiş analizör sıralamasını kontrol et
+      try {
+        const savedOrder = await AsyncStorage.getItem('analyzer_order');
+        if (savedOrder) {
+          const orderIds = JSON.parse(savedOrder);
+          setAnalyzerOrder(orderIds);
+        } else {
+          // İlk kez için varsayılan sıralama oluştur
+          setAnalyzerOrder(Array.from(grouped.keys()));
+        }
+      } catch (error) {
+        console.log('Analizör sıralaması yüklenirken hata:', error);
+        // Hata durumunda varsayılan sıralama kullan
+        setAnalyzerOrder(Array.from(grouped.keys()));
+      }
+      
       setGroupedRegisters(grouped);
     } catch (error) {
       console.error('Error loading registers:', error);
@@ -171,6 +238,90 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     setSelectedRegister(register);
     setWriteModalVisible(true);
   };
+  
+  // Analizör sürükleme başladığında çağrılır
+  const handleAnalyzerLongPress = useCallback((index: number) => {
+    setDraggedAnalyzerIndex(index);
+    
+    // Android cihazlarda bir bildirim göster
+    if (Platform.OS === 'android') {
+      ToastAndroid.showWithGravityAndOffset(
+        'Bırakmak istediğiniz konuma sürükleyin',
+        ToastAndroid.SHORT,
+        ToastAndroid.BOTTOM,
+        0,
+        100
+      );
+    }
+  }, []);
+  
+  // Analizör bırakıldığında çağrılır
+  const handleAnalyzerDrop = useCallback(async (targetIndex: number) => {
+    if (draggedAnalyzerIndex === undefined || draggedAnalyzerIndex === targetIndex) {
+      setDraggedAnalyzerIndex(undefined);
+      return;
+    }
+
+    // Sürüklenen analizörün yeni konumunu hesaplama
+    const newOrder = [...analyzerOrder];
+    const [draggedItem] = newOrder.splice(draggedAnalyzerIndex, 1);
+    newOrder.splice(targetIndex, 0, draggedItem);
+    
+    // Yeni sıralamayı güncelle
+    setAnalyzerOrder(newOrder);
+    
+    // Yeni sıralamayı kalıcı olarak kaydetme
+    try {
+      await AsyncStorage.setItem('analyzer_order', JSON.stringify(newOrder));
+    } catch (error) {
+      console.error('Analizör sıralaması kaydedilirken hata:', error);
+    }
+    
+    // Sürüklemeyi sonlandır
+    setDraggedAnalyzerIndex(undefined);
+  }, [draggedAnalyzerIndex, analyzerOrder]);
+
+  // Register sürükleme başladığında çağrılır
+  const handleRegisterLongPress = useCallback((index: number) => {
+    setDraggedRegisterIndex(index);
+    
+    // Android cihazlarda bir bildirim göster
+    if (Platform.OS === 'android') {
+      ToastAndroid.showWithGravityAndOffset(
+        'Bırakmak istediğiniz konuma sürükleyin',
+        ToastAndroid.SHORT,
+        ToastAndroid.BOTTOM,
+        0,
+        100
+      );
+    }
+  }, []);
+  
+  // Register bırakıldığında çağrılır
+  const handleRegisterDrop = useCallback(async (targetIndex: number) => {
+    if (draggedRegisterIndex === undefined || draggedRegisterIndex === targetIndex) {
+      setDraggedRegisterIndex(undefined);
+      return;
+    }
+
+    // Sürüklenen register'ın yeni konumunu hesaplama
+    const newOrder = [...registerOrder];
+    const [draggedItem] = newOrder.splice(draggedRegisterIndex, 1);
+    newOrder.splice(targetIndex, 0, draggedItem);
+    
+    // Yeni sıralamayı güncelle
+    setRegisterOrder(newOrder);
+    
+    // Yeni sıralamayı kalıcı olarak kaydetme
+    try {
+      await AsyncStorage.setItem('register_order', JSON.stringify(newOrder));
+    } catch (error) {
+      console.error('Register sıralaması kaydedilirken hata:', error);
+    }
+    
+    // Sürüklemeyi sonlandır
+    setDraggedRegisterIndex(undefined);
+  }, [draggedRegisterIndex, registerOrder]);
 
   const handleAnalyzerSelect = (analyzerId: string) => {
     // Animate transition
@@ -266,19 +417,32 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     };
   };
 
-  const renderAnalyzerItem = ({ item }: { item: [string, RegisterData[]] }) => {
+  const renderAnalyzerItem = ({ item, index }: { item: [string, RegisterData[]], index: number }) => {
     const [analyzerId, analyzerRegisters] = item;
     const firstRegister = analyzerRegisters[0];
     const stats = getAnalyzerStats(analyzerId);
+    const isBeingDragged = draggedAnalyzerIndex === index;
     
     return (
-      <View style={styles.cardWrapper}>
-        <GradientCard
-          colors={['#1E88E5', '#42A5F5']}
-          style={styles.analyzerCard}
-          mode="elevated"
-          onPress={() => handleAnalyzerSelect(analyzerId)}
-        >
+      <TouchableOpacity
+        onLongPress={() => handleAnalyzerLongPress(index)}
+        onPress={draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index
+          ? () => handleAnalyzerDrop(index)
+          : () => handleAnalyzerSelect(analyzerId)
+        }
+        activeOpacity={0.9}
+        delayLongPress={300}
+      >
+        <View style={styles.cardWrapper}>
+          <GradientCard
+            colors={['#1E88E5', '#42A5F5']}
+            style={{
+              ...styles.analyzerCard,
+              ...(isBeingDragged ? styles.beingDragged : {}),
+              ...(draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index ? styles.dropTarget : {})
+            }}
+            mode="elevated"
+          >
           <BlurView
             intensity={isDarkMode ? 20 : 15}
             tint={isDarkMode ? "dark" : "light"}
@@ -320,15 +484,6 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
                     Total Registers
                   </Text>
                 </View>
-                
-                <View style={[styles.statCard, stats.live > 0 && styles.liveStatCard]}>
-                  <Text style={[styles.statValue, stats.live > 0 && styles.liveStatValue]}>
-                    {stats.live}
-                  </Text>
-                  <Text style={styles.statLabel}>
-                    Live Updates
-                  </Text>
-                </View>
               </View>
               
               {/* Footer */}
@@ -344,19 +499,22 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
           </BlurView>
         </GradientCard>
       </View>
+    </TouchableOpacity>
     );
   };
 
-  const renderRegisterItem = ({ item }: { item: RegisterData }) => {
+  const renderRegisterItem = ({ item, index }: { item: RegisterData, index: number }) => {
     const realTimeValue = realTimeValues.get(item._id);
     const displayValue = realTimeValue !== undefined ? realTimeValue : (item.value || 'N/A');
     const isRealTime = realTimeValue !== undefined;
     const isWritable = item.registerType !== 'read';
+    const isBeingDragged = draggedRegisterIndex === index;
+    const canDrop = draggedRegisterIndex !== undefined && draggedRegisterIndex !== index;
     
     const getStatusColor = (status: string) => {
       switch (status) {
         case 'active':
-          return paperTheme.colors.tertiary;
+          return '#4CAF50';
         case 'inactive':
           return paperTheme.colors.outline;
         case 'error':
@@ -369,23 +527,35 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     const statusColor = getStatusColor(item.status || 'inactive');
     
     return (
-      <View style={styles.cardWrapper}>
-        <Card
-          style={styles.registerCard}
-          mode="elevated"
-          onLongPress={isWritable ? () => handleWriteRegister(item) : undefined}
-        >
+      <TouchableOpacity
+        onLongPress={() => handleRegisterLongPress(index)}
+        onPress={canDrop ? () => handleRegisterDrop(index) : undefined}
+        activeOpacity={0.9}
+        delayLongPress={300}
+      >
+        <View style={[styles.cardWrapper, isBeingDragged && styles.beingDragged, canDrop && styles.dropTarget]}>
+          <Card
+            style={styles.registerCard}
+            mode="elevated"
+          >
           <Card.Content>
-            {/* Header */}
+            {/* Modern Header */}
             <View style={styles.registerHeader}>
               <View style={styles.registerHeaderLeft}>
                 <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
-                <Text style={[styles.registerAddress, {color: paperTheme.colors.onSurfaceVariant}]}>
-                  Address: {item.address}
+                <Text style={[styles.registerName, {color: paperTheme.colors.onSurface}]}>
+                  {item.name}
                 </Text>
               </View>
               
               <View style={styles.registerBadges}>
+                {/* Type Badge */}
+                <View style={[styles.typeBadge, { backgroundColor: paperTheme.colors.surfaceVariant }]}>
+                  <Text style={[styles.typeText, {color: paperTheme.colors.primary}]}>
+                    {item.dataType?.toUpperCase()}
+                  </Text>
+                </View>
+                
                 {isRealTime && (
                   <View style={styles.liveBadgeSmall}>
                     <View style={styles.pulseIndicatorSmall} />
@@ -395,53 +565,62 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
               </View>
             </View>
             
-            {/* Value Display */}
-            <View style={[styles.registerValueContainer, { backgroundColor: paperTheme.colors.surfaceVariant }]}>
-              <View style={styles.valueContent}>
-                <Text style={styles.registerName}>
-                  {item.name}
+            {/* Value Display - Modern */}
+            <View style={[styles.registerValueContainer, { 
+              backgroundColor: isRealTime ? 'rgba(244, 67, 54, 0.08)' : paperTheme.colors.surfaceVariant 
+            }]}>
+              <Text
+                style={[
+                  styles.registerValue,
+                  {
+                    color: isRealTime ? '#F44336' : paperTheme.colors.onSurface,
+                    fontSize: typeof displayValue === 'number' && displayValue.toString().length > 8 ? 20 : 28
+                  }
+                ]}
+              >
+                {displayValue}
+              </Text>
+              {item.unit && (
+                <Text style={[styles.unitText, {color: paperTheme.colors.onSurfaceVariant}]}>
+                  {item.unit}
                 </Text>
-                <View style={styles.valueRow}>
-                  <Text
-                    style={[
-                      styles.registerValue,
-                      {color: isRealTime ? '#F44336' : paperTheme.colors.onSurface}
-                    ]}
-                  >
-                    {displayValue}
-                  </Text>
-                  {/* Type Badge */}
-                  <View style={styles.typeBadge}>
-                    <MaterialCommunityIcons
-                      name={item.dataType === 'bit' ? 'toggle-switch' : 'numeric'}
-                      size={14}
-                      color={paperTheme.colors.onSurfaceVariant}
-                    />
-                    <Text style={[styles.typeText, {color: paperTheme.colors.onSurfaceVariant}]}>
-                      {item.dataType}
-                    </Text>
-                  </View>
-                </View>
-              </View>
+              )}
             </View>
             
             {/* Footer */}
             <View style={styles.registerFooter}>
-              <Text style={[styles.lastUpdate, {color: paperTheme.colors.onSurfaceVariant}]}>
-                {item.timestamp ? `Updated: ${new Date(item.timestamp).toLocaleTimeString()}` : 'Never updated'}
-              </Text>
+              <View style={styles.footerLeft}>
+                <MaterialCommunityIcons
+                  name="clock-outline"
+                  size={12}
+                  color={paperTheme.colors.onSurfaceVariant}
+                  style={styles.clockIcon}
+                />
+                <Text style={[styles.lastUpdate, {color: paperTheme.colors.onSurfaceVariant}]}>
+                  {item.timestamp ? new Date(item.timestamp).toLocaleTimeString('tr-TR', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  }) : 'Never updated'}
+                </Text>
+              </View>
               
               {isWritable ? (
-                <IconButton
-                  icon="pencil"
-                  iconColor={paperTheme.colors.primary}
-                  size={20}
+                <TouchableOpacity
                   onPress={() => handleWriteRegister(item)}
-                  style={styles.writeButton}
-                />
+                  style={[
+                    styles.writeButtonContainer,
+                    { backgroundColor: paperTheme.colors.primaryContainer || 'rgba(33, 150, 243, 0.1)' }
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="pencil"
+                    size={18}
+                    color={paperTheme.colors.primary}
+                  />
+                </TouchableOpacity>
               ) : (
                 <MaterialCommunityIcons
-                  name="lock"
+                  name="lock-outline"
                   size={16}
                   color={paperTheme.colors.onSurfaceVariant}
                 />
@@ -450,6 +629,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
           </Card.Content>
         </Card>
       </View>
+      </TouchableOpacity>
     );
   };
 
@@ -483,6 +663,18 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
   }
 
   if (viewMode === 'analyzers') {
+    // Analizörleri kaydedilmiş sıralamaya göre düzenle
+    const sortedAnalyzers = analyzerOrder
+      .filter(id => groupedRegisters.has(id))
+      .map(id => [id, groupedRegisters.get(id)!] as [string, RegisterData[]]);
+    
+    // Sıralama listesinde olmayan analizörleri ekle
+    Array.from(groupedRegisters.keys()).forEach(id => {
+      if (!analyzerOrder.includes(id)) {
+        sortedAnalyzers.push([id, groupedRegisters.get(id)!]);
+      }
+    });
+    
     return (
       <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
         <StatusBar style={isDarkMode ? "light" : "dark"} />
@@ -494,7 +686,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
           }}
         >
           <FlatList
-          data={Array.from(groupedRegisters.entries())}
+          data={sortedAnalyzers}
           renderItem={renderAnalyzerItem}
           keyExtractor={(item) => item[0]}
           contentContainerStyle={styles.content}
@@ -522,7 +714,16 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
   }
 
   // Register view mode
-  const selectedRegisters = selectedAnalyzerId ? groupedRegisters.get(selectedAnalyzerId) || [] : [];
+  const selectedRegistersUnsorted = selectedAnalyzerId ? groupedRegisters.get(selectedAnalyzerId) || [] : [];
+  
+  // Register'ları kaydedilmiş sıralamaya göre düzenle
+  const selectedRegisters = registerOrder.length > 0
+    ? registerOrder
+        .filter(id => selectedRegistersUnsorted.some(r => r._id === id))
+        .map(id => selectedRegistersUnsorted.find(r => r._id === id)!)
+        .concat(selectedRegistersUnsorted.filter(r => !registerOrder.includes(r._id)))
+    : selectedRegistersUnsorted;
+  
   const selectedAnalyzerName = selectedRegisters.length > 0 
     ? selectedRegisters[0].analyzerName || `Analyzer ${selectedAnalyzerId}`
     : 'Unknown Analyzer';
@@ -610,7 +811,39 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
   );
 }
 
+// Kullanıcıya analizör sürükleme özelliğini bildirmek için toast
+const showDragInfo = () => {
+  if (Platform.OS === 'android') {
+    ToastAndroid.showWithGravityAndOffset(
+      'Analizörleri sıralamak için uzun basın ve sürükleyin',
+      ToastAndroid.LONG,
+      ToastAndroid.BOTTOM,
+      0,
+      100
+    );
+  }
+};
+
 const styles = StyleSheet.create({
+  beingDragged: {
+    opacity: 0.85,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 15,
+    transform: [{ scale: 1.05 }],
+  },
+  dropTarget: {
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderStyle: 'dashed',
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
   container: {
     flex: 1,
   },
@@ -719,15 +952,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 12,
+    justifyContent: 'center',
   },
   statCard: {
-    flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 10,
     padding: 12,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
+    minWidth: 320,
   },
   liveStatCard: {
     backgroundColor: 'rgba(244, 67, 54, 0.15)',
@@ -764,104 +998,123 @@ const styles = StyleSheet.create({
   // Modern Register Card Styles
   registerCard: {
     marginBottom: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
   },
   registerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   registerHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    marginRight: 8,
   },
   statusIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
-  },
-  registerAddress: {
-    fontSize: 12,
-    fontWeight: '600',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
   },
   registerBadges: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
   },
   liveBadgeSmall: {
     backgroundColor: '#F44336',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 6,
   },
   pulseIndicatorSmall: {
     width: 4,
     height: 4,
     borderRadius: 2,
     backgroundColor: 'white',
-    marginRight: 3,
+    marginRight: 4,
   },
   liveTextSmall: {
     fontSize: 9,
     fontWeight: '700',
     color: 'white',
+    letterSpacing: 0.5,
   },
   registerValueContainer: {
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 10,
-  },
-  valueContent: {
-    flex: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    alignItems: 'flex-start',
+    minHeight: 80,
+    justifyContent: 'center',
   },
   registerName: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-    color: 'rgba(0,0,0,0.7)',
-  },
-  valueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    fontSize: 15,
+    fontWeight: '700',
+    color: 'rgba(0,0,0,0.87)',
+    flex: 1,
   },
   registerValue: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  unitText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 4,
   },
   typeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
   },
   typeText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   registerFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.1)',
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  footerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  clockIcon: {
+    marginRight: 4,
   },
   lastUpdate: {
     fontSize: 11,
+    fontWeight: '500',
   },
-  writeButton: {
-    margin: -6,
+  writeButtonContainer: {
+    padding: 4,
+    borderRadius: 8,
   },
   
   // Navigation Styles

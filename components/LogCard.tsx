@@ -47,6 +47,13 @@ const LogCard: React.FC<LogCardProps> = ({
             </View>
             
             <View style={styles.registerBadges}>
+              {log.dataType && (
+                <View style={styles.typeBadge}>
+                  <Text style={[styles.typeText, {color: theme.colors.onSurfaceVariant}]}>
+                    {log.dataType.toUpperCase()}
+                  </Text>
+                </View>
+              )}
               {isRunning && !isExpired && (
                 <View style={styles.liveBadgeSmall}>
                   <View style={styles.pulseIndicatorSmall} />
@@ -78,17 +85,6 @@ const LogCard: React.FC<LogCardProps> = ({
                   </Text>
                   <Text style={[styles.endDateText, {color: theme.colors.onSurfaceVariant}]}>
                     Until {endDate.toLocaleDateString()}
-                  </Text>
-                </View>
-                {/* Type Badge */}
-                <View style={styles.typeBadge}>
-                  <MaterialCommunityIcons
-                    name={log.isKWHCounter ? 'counter' : 'gauge'}
-                    size={14}
-                    color={theme.colors.onSurfaceVariant}
-                  />
-                  <Text style={[styles.typeText, {color: theme.colors.onSurfaceVariant}]}>
-                    {log.isKWHCounter ? 'KWH' : log.dataType}
                   </Text>
                 </View>
               </View>

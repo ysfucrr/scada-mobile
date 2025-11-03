@@ -90,9 +90,11 @@ export default function WriteRegisterModal({ visible, register, onClose }: Write
               <Text style={styles.registerDetails}>
                 Analyzer: {register.analyzerName || register.analyzerId} | Address: {register.address}
               </Text>
-              <Text style={styles.registerDetails}>
-                Type: {register.dataType} | Unit: {register.unit || 'N/A'}
-              </Text>
+              {register.unit && (
+                <Text style={styles.registerDetails}>
+                  Unit: {register.unit}
+                </Text>
+              )}
             </View>
           )}
 

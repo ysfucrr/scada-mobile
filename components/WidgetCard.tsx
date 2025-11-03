@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Chip, Text, useTheme } from 'react-native-paper';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { AppTheme } from '../theme/theme';
@@ -21,6 +21,11 @@ interface WidgetCardProps {
   registers: RegisterData[];
   gradientColors?: readonly [string, string, ...string[]];
   icon?: string;
+  onLongPress?: () => void;
+  isBeingDragged?: boolean;
+  draggedIndex?: number;
+  myIndex?: number;
+  onDrop?: (index: number) => void;
 }
 
 const WidgetCard: React.FC<WidgetCardProps> = ({
@@ -28,32 +33,109 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
   title,
   registers = [],
   gradientColors = ['#1E88E5', '#42A5F5'],
-  icon = 'gauge'
+  icon = 'gauge',
+  onLongPress,
+  isBeingDragged = false,
+  draggedIndex,
+  myIndex,
+  onDrop
 }) => {
   const theme = useTheme() as AppTheme;
   const { isDarkMode } = useAppTheme();
   
+  // Animations
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const cardTranslateY = useRef(new Animated.Value(30)).current;
+  const cardScale = useRef(new Animated.Value(1)).current;
+  
+  useEffect(() => {
+    // Card entrance animation
+    Animated.parallel([
+      Animated.timing(cardOpacity, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(cardTranslateY, {
+        toValue: 0,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+  
+  // Sürükleme animasyonları
+  useEffect(() => {
+    if (isBeingDragged) {
+      // Sürükleme başladığında büyütme efekti
+      Animated.spring(cardScale, {
+        toValue: 1.05,
+        tension: 120,
+        friction: 7,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      // Sürükleme bittiğinde normal boyuta dönme
+      Animated.spring(cardScale, {
+        toValue: 1,
+        tension: 150,
+        friction: 7,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [isBeingDragged]);
+  
+  
+  const canDrop = draggedIndex !== undefined && draggedIndex !== myIndex;
+  
+  const handleDrop = () => {
+    if (canDrop && onDrop && draggedIndex !== undefined) {
+      onDrop(myIndex || 0);
+    }
+  };
+  
   return (
-    <View style={styles.cardWrapper}>
+    <TouchableOpacity
+      onLongPress={onLongPress}
+      onPress={canDrop ? handleDrop : undefined}
+      delayLongPress={300}
+      activeOpacity={0.9}
+    >
+      <Animated.View
+        style={[
+          styles.cardWrapper,
+          {
+            opacity: cardOpacity,
+            transform: [
+              { translateY: cardTranslateY },
+              { scale: cardScale },
+            ],
+          },
+          isBeingDragged && styles.beingDragged,
+          draggedIndex !== undefined && myIndex !== draggedIndex && styles.dropTarget,
+        ]}
+      >
       <GradientCard
         colors={gradientColors}
         style={styles.card}
         mode="elevated"
+        onPress={undefined}
       >
-        <BlurView
-          intensity={isDarkMode ? 20 : 15}
-          tint={isDarkMode ? "dark" : "light"}
-          style={styles.blurContainer}
-        >
-          <View style={styles.content}>
+        <View style={styles.cardOverflowWrapper}>
+          <BlurView
+            intensity={isDarkMode ? 20 : 15}
+            tint={isDarkMode ? "dark" : "light"}
+            style={styles.blurContainer}
+          >
+            <View style={styles.content}>
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.iconWrapper}>
                 <MaterialCommunityIcons
                   name={icon as any}
-                  size={28}
+                  size={24}
                   color="white"
-                  style={styles.iconShadow}
                 />
               </View>
               
@@ -120,7 +202,7 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
                         <Text
                           style={[
                             styles.registerValue,
-                            register.isLive && styles.liveValue
+                            register.isLive && styles.liveValue,
                           ]}
                           numberOfLines={1}
                           adjustsFontSizeToFit
@@ -140,69 +222,89 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
             )}
           </View>
         </BlurView>
+        </View>
       </GradientCard>
-    </View>
+      </Animated.View>
+    </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
+  beingDragged: {
+    opacity: 0.85,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  dropTarget: {
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderStyle: 'dashed',
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
   cardWrapper: {
     marginBottom: 12,
   },
   card: {
-    elevation: 3,
+    elevation: 8,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 6,
     },
     shadowOpacity: 0.15,
-    shadowRadius: 4,
+    shadowRadius: 12,
+    borderRadius: 20,
+  },
+  cardOverflowWrapper: {
+    overflow: 'hidden',
+    borderRadius: 20,
   },
   blurContainer: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: 'transparent',
   },
   content: {
-    padding: 14,
+    padding: 18,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
   },
   iconWrapper: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 10,
-    padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 14,
+    padding: 10,
     width: 44,
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  iconShadow: {
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
   title: {
     fontWeight: '700',
     color: 'white',
-    fontSize: 16,
+    fontSize: 18,
     flex: 1,
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
   countChip: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 0,
     minWidth: 44,
+    height: 32,
+    borderRadius: 8,
   },
   countChipPlaceholder: {
     width: 44,
@@ -215,31 +317,36 @@ const styles = StyleSheet.create({
   registersGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 10,
     justifyContent: 'center',
   },
   registerCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    padding: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    minHeight: 60,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    minHeight: 80,
     position: 'relative',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   liveIndicator: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: 8,
+    right: 8,
     backgroundColor: 'rgba(244, 67, 54, 0.2)',
     borderRadius: 10,
-    padding: 3,
+    padding: 4,
   },
   liveDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: '#F44336',
   },
   registerContent: {
@@ -248,31 +355,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   registerLabel: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.85)',
     fontWeight: '600',
-    fontSize: 10,
-    marginBottom: 4,
+    fontSize: 11,
+    marginBottom: 8,
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
   valueContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 2,
+    gap: 4,
     justifyContent: 'center',
   },
   registerValue: {
     fontWeight: '800',
-    color: 'white',
-    fontSize: 16,
+    color: '#FFFFFF',
+    fontSize: 20,
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   liveValue: {
     color: '#F44336',
   },
   unit: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 11,
     fontWeight: '600',
+    marginLeft: 2,
   },
   emptyContainer: {
     padding: 32,

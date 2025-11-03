@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
   IconButton,
@@ -92,6 +93,7 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   const [refreshInterval, setRefreshInterval] = useState(10);
   const [widgetsLoading, setWidgetsLoading] = useState(true);
   const [widgetValues, setWidgetValues] = useState<Map<string, any>>(new Map());
+  const [draggedWidgetIndex, setDraggedWidgetIndex] = useState<number | undefined>(undefined);
   
   // Callbacks ref
   const callbacksMapRef = useRef(new Map<string, (value: any) => void>());
@@ -114,7 +116,46 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
     try {
       setWidgetsLoading(true);
       const data = await ApiService.getWidgets();
-      setWidgets(data);
+      
+      // API'den gelen widget'ları almak
+      let orderedWidgets = [...data];
+      
+      // Kayıtlı widget sıralamasını kontrol et
+      try {
+        const savedOrder = await AsyncStorage.getItem('widget_order');
+        if (savedOrder) {
+          const orderIds = JSON.parse(savedOrder);
+          
+          // Kaydedilmiş sıralamaya göre widget'ları düzenle
+          if (Array.isArray(orderIds) && orderIds.length > 0) {
+            // Mevcut widget'ların id'lerini kontrol et ve sırala
+            const orderedWidgetsList: any[] = [];
+            
+            // Önce kayıtlı sıraya göre widget'ları ekle
+            orderIds.forEach((id: string) => {
+              const widget = data.find((w) => w._id === id);
+              if (widget) {
+                orderedWidgetsList.push(widget);
+              }
+            });
+            
+            // Kayıtlı sırada olmayan widget'ları sonuna ekle
+            data.forEach(widget => {
+              if (!orderIds.includes(widget._id)) {
+                orderedWidgetsList.push(widget);
+              }
+            });
+            
+            if (orderedWidgetsList.length > 0) {
+              orderedWidgets = orderedWidgetsList;
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Widget sıralaması yüklenirken hata:', error);
+      }
+      
+      setWidgets(orderedWidgets);
       
       // Subscribe to widget registers via WebSocket - only when overview tab is active
       if (wsConnected && data.length > 0 && activeTab === 'overview' && isActive) {
@@ -279,6 +320,38 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
     }
   };
 
+  // Widget sürükleme başladığında çağrılır
+  const handleWidgetLongPress = useCallback((index: number) => {
+    setDraggedWidgetIndex(index);
+  }, []);
+
+  // Widget bırakıldığında çağrılır
+  const handleWidgetDrop = useCallback(async (targetIndex: number) => {
+    if (draggedWidgetIndex === undefined || draggedWidgetIndex === targetIndex) {
+      setDraggedWidgetIndex(undefined);
+      return;
+    }
+
+    // Sürüklenen widget'ı yeni konumuna taşıma
+    const newWidgets = [...widgets];
+    const [draggedWidget] = newWidgets.splice(draggedWidgetIndex, 1);
+    newWidgets.splice(targetIndex, 0, draggedWidget);
+    
+    // Widget'ların yeni sıralamasını güncelleme
+    setWidgets(newWidgets);
+    
+    // Yeni sıralamayı kalıcı olarak kaydetme
+    try {
+      const widgetOrder = newWidgets.map(widget => widget._id);
+      await AsyncStorage.setItem('widget_order', JSON.stringify(widgetOrder));
+    } catch (error) {
+      console.error('Widget sıralaması kaydedilirken hata:', error);
+    }
+    
+    // Sürüklemeyi sonlandırma
+    setDraggedWidgetIndex(undefined);
+  }, [draggedWidgetIndex, widgets]);
+
   // Format bytes to human-readable format
   const formatBytes = (bytes: number, decimals = 2) => {
     if (bytes === 0) return "0 Bytes";
@@ -334,7 +407,7 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
 
     return (
       <View style={styles.widgetsContainer}>
-        {widgets.map((widget) => (
+        {widgets.map((widget, index) => (
           <WidgetCard
             key={widget._id}
             id={widget._id}
@@ -356,6 +429,11 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
                   })
                 : []
             }
+            onLongPress={() => handleWidgetLongPress(index)}
+            isBeingDragged={draggedWidgetIndex === index}
+            draggedIndex={draggedWidgetIndex}
+            myIndex={index}
+            onDrop={handleWidgetDrop}
           />
         ))}
       </View>
