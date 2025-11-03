@@ -329,7 +329,7 @@ export default function BillingScreen() {
                   <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}>
                     <MaterialCommunityIcons
                       name="calendar-clock"
-                      size={20}
+                      size={18}
                       color="#FFFFFF"
                     />
                     <Text style={styles.summaryCardLabel}>Days</Text>
@@ -340,7 +340,7 @@ export default function BillingScreen() {
                   <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}>
                     <MaterialCommunityIcons
                       name="flash"
-                      size={20}
+                      size={18}
                       color="#FFFFFF"
                     />
                     <Text style={styles.summaryCardLabel}>Used</Text>
@@ -351,12 +351,12 @@ export default function BillingScreen() {
                   <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
                     <MaterialCommunityIcons
                       name="cash-multiple"
-                      size={20}
+                      size={18}
                       color="#FFFFFF"
                     />
                     <Text style={styles.summaryCardLabel}>Total Cost</Text>
                     <Text style={[styles.summaryCardValue, styles.totalCostValue]}>
-                      {formatCurrency(totalCost, billing.currency).split(' ')[0]}
+                      {formatCurrency(totalCost, billing.currency)}
                     </Text>
                   </View>
                 </View>
@@ -651,35 +651,38 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   summaryCards: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    gap: 12,
+    flexDirection: 'column',
+    marginBottom: 16,
+    gap: 8,
   },
   summaryCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 100,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    minHeight: 56,
   },
   summaryCardLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
     color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginLeft: 12,
+    flex: 1,
   },
   summaryCardValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
-    marginTop: 4,
+    textAlign: 'right',
   },
   totalCostValue: {
-    fontSize: 20,
+    fontSize: 18,
+    fontWeight: '800',
   },
   trendLogsContainer: {
     marginBottom: 16,
