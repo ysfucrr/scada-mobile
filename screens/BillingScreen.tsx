@@ -344,7 +344,7 @@ export default function BillingScreen() {
                     />
                     <Text style={styles.summaryCardLabel}>Used</Text>
                     <Text style={styles.summaryCardValue}>
-                      {convertToUnit(totalUsed).split(' ')[0]}
+                      {convertToUnit(totalUsed)}
                     </Text>
                   </View>
                   <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
@@ -391,13 +391,13 @@ export default function BillingScreen() {
                             <View style={styles.metricItem}>
                               <Text style={styles.metricLabel}>First</Text>
                               <Text style={styles.metricValue}>
-                                {convertToUnit(trendLog.firstValue).split(' ')[0]}
+                                {convertToUnit(trendLog.firstValue)}
                               </Text>
                             </View>
                             <View style={styles.metricItem}>
                               <Text style={styles.metricLabel}>Current</Text>
                               <Text style={styles.metricValue}>
-                                {convertToUnit(currentValue).split(' ')[0]}
+                                {convertToUnit(currentValue)}
                               </Text>
                             </View>
                           </View>
@@ -405,7 +405,7 @@ export default function BillingScreen() {
                             <View style={styles.metricItem}>
                               <Text style={styles.metricLabel}>Used</Text>
                               <Text style={[styles.metricValue, styles.usedValue]}>
-                                {convertToUnit(used).split(' ')[0]}
+                                {convertToUnit(used)}
                               </Text>
                             </View>
                             <View style={[styles.metricItem, styles.costItem]}>
