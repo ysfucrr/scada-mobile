@@ -223,10 +223,9 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       // Böylece agent değiştiğinde abonelikler kaybolmaz
 
       const settings: ServerSettings = JSON.parse(savedSettings);
-      // Cloud Bridge (port 443) her zaman HTTPS/WSS kullanır
-      const isCloudBridge = settings.serverPort === '443';
-      const protocol = isCloudBridge ? 'wss' : (settings.useHttps ? 'wss' : 'ws');
-      const httpProtocol = isCloudBridge ? 'https' : (settings.useHttps ? 'https' : 'http');
+      // Apple App Transport Security (ATS) gereği her zaman HTTPS/WSS kullan
+      const protocol = 'wss';
+      const httpProtocol = 'https';
       const socketURL = `${httpProtocol}://${settings.serverHost}:${settings.serverPort}`;
       console.log(`[SocketIO] Connecting to: ${socketURL}`);
       setConnectionState('connecting');
@@ -550,9 +549,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       }
 
       const settings: ServerSettings = JSON.parse(savedSettings);
-      // Cloud Bridge (port 443) her zaman HTTPS kullanır
-      const isCloudBridge = settings.serverPort === '443';
-      const protocol = isCloudBridge ? 'https' : (settings.useHttps ? 'https' : 'http');
+      // Apple App Transport Security (ATS) gereği her zaman HTTPS kullan
+      const protocol = 'https';
       const apiUrl = `${protocol}://${settings.serverHost}:${settings.serverPort}`;
 
       const response = await fetch(`${apiUrl}/api/mobile/registers/write`, {

@@ -112,8 +112,8 @@ class ApiService {
   private updateUrls(): void {
     if (!this.settings) return;
     
-    // Cloud Bridge her zaman HTTPS kullanır
-    const protocol = this.useCloudBridge ? 'https' : (this.settings.useHttps ? 'https' : 'http');
+    // Apple App Transport Security (ATS) gereği her zaman HTTPS kullan
+    const protocol = 'https';
     this.baseUrl = `${protocol}://${this.settings.serverHost}:${this.settings.serverPort}`;
     
     // Cloud Bridge modunda veya apiPort tanımlanmadığında, serverPort kullan
@@ -625,8 +625,8 @@ class ApiService {
   getWebSocketUrl(): string {
     if (!this.settings) return '';
     
-    // Cloud Bridge her zaman WSS (WebSocket Secure) kullanır
-    const protocol = this.useCloudBridge ? 'wss' : (this.settings.useHttps ? 'wss' : 'ws');
+    // Apple App Transport Security (ATS) gereği her zaman WSS (WebSocket Secure) kullan
+    const protocol = 'wss';
     
     // Add agent ID as query parameter if available
     let url = '';
