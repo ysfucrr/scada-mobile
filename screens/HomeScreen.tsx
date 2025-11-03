@@ -577,8 +577,7 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
               .map(collection => ({
                 id: collection.name,
                 label: collection.name,
-                value: collection.count.toLocaleString(),
-                unit: `(${formatBytes(collection.size * 1024 * 1024)})`
+                value: collection.count.toLocaleString()
               }))}
             icon="folder-multiple"
             gradientColors={['#00BCD4', '#4DD0E1']}
@@ -590,7 +589,7 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   
   // Render the main tab navigation
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: paperTheme.colors.background }]} edges={['bottom']}>
+    <SafeAreaView style={[styles.container, { backgroundColor: paperTheme.colors.background }]} edges={[]}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
 
       <View style={styles.tabContainer}>
@@ -632,6 +631,7 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
       {/* Tab content with simple ScrollView */}
       <ScrollView
         style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
         }
@@ -650,6 +650,9 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 0,
   },
   tabContainer: {
     flexDirection: 'row',
@@ -683,7 +686,7 @@ const styles = StyleSheet.create({
   widgetsContainer: {
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 100,
+    paddingBottom: 16,
   },
   emptyWidgetsContainer: {
     padding: 16,
@@ -710,7 +713,7 @@ const styles = StyleSheet.create({
   },
   systemHealthContainer: {
     padding: 16,
-    paddingBottom: 100,
+    paddingBottom: 16,
   },
   refreshControlsWrapper: {
     marginBottom: 16,
