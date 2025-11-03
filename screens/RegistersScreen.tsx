@@ -422,6 +422,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     const firstRegister = analyzerRegisters[0];
     const stats = getAnalyzerStats(analyzerId);
     const isBeingDragged = draggedAnalyzerIndex === index;
+    const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
     
     return (
       <TouchableOpacity
@@ -435,7 +436,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       >
         <View style={styles.cardWrapper}>
           <GradientCard
-            colors={['#1E88E5', '#42A5F5']}
+            colors={gradientColors}
             style={{
               ...styles.analyzerCard,
               ...(isBeingDragged ? styles.beingDragged : {}),

@@ -493,6 +493,7 @@ export default function LogsScreen() {
     const firstLog = analyzerLogs[0];
     const stats = getAnalyzerStats(analyzerId);
     const isBeingDragged = draggedAnalyzerIndex === index;
+    const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
     
     return (
       <TouchableOpacity
@@ -506,7 +507,7 @@ export default function LogsScreen() {
       >
         <View style={styles.cardWrapper}>
           <GradientCard
-            colors={['#1E88E5', '#42A5F5']}
+            colors={gradientColors}
             style={{
               ...styles.analyzerCard,
               ...(isBeingDragged ? styles.beingDragged : {}),
@@ -553,15 +554,6 @@ export default function LogsScreen() {
                   </Text>
                   <Text style={styles.statLabel}>
                     Total Logs
-                  </Text>
-                </View>
-                
-                <View style={[styles.statCard, stats.running > 0 && styles.liveStatCard]}>
-                  <Text style={[styles.statValue, stats.running > 0 && styles.liveStatValue]}>
-                    {stats.running}
-                  </Text>
-                  <Text style={styles.statLabel}>
-                    Running
                   </Text>
                 </View>
               </View>
@@ -724,15 +716,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 12,
+    justifyContent: 'center',
   },
   statCard: {
-    flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 10,
     padding: 12,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
+    minWidth: 320,
   },
   liveStatCard: {
     backgroundColor: 'rgba(76, 175, 80, 0.25)',

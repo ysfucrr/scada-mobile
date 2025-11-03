@@ -32,7 +32,7 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
   id,
   title,
   registers = [],
-  gradientColors = ['#1E88E5', '#42A5F5'],
+  gradientColors,
   icon = 'gauge',
   onLongPress,
   isBeingDragged = false,
@@ -42,6 +42,9 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
 }) => {
   const theme = useTheme() as AppTheme;
   const { isDarkMode } = useAppTheme();
+  
+  // Set default gradient colors based on dark mode
+  const effectiveGradientColors = gradientColors || (isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const);
   
   // Animations
   const cardOpacity = useRef(new Animated.Value(0)).current;
@@ -117,7 +120,7 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
         ]}
       >
       <GradientCard
-        colors={gradientColors}
+        colors={effectiveGradientColors}
         style={styles.card}
         mode="elevated"
         onPress={undefined}

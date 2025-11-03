@@ -408,10 +408,12 @@ export default function ConsumptionScreen() {
       percentageChange = ((liveValue - comparison.previousValue) / comparison.previousValue) * 100;
     }
 
+    const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
+    
     return (
       <View style={styles.widgetWrapper}>
         <GradientCard
-          colors={['#1E88E5', '#42A5F5']}
+          colors={gradientColors}
           style={{
             ...styles.widgetCard,
             ...(draggedWidgetIndex === index ? styles.beingDragged : {}),

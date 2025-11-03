@@ -3,6 +3,7 @@ import { BlurView } from 'expo-blur';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Divider, IconButton, Text, useTheme } from 'react-native-paper';
+import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { AppTheme } from '../theme/theme';
 import GradientCard from './GradientCard';
 
@@ -29,18 +30,21 @@ const DataCard: React.FC<DataCardProps> = ({
   icon,
   onRefresh,
   isLoading = false,
-  gradientColors = ['#1E88E5', '#42A5F5']
+  gradientColors
 }) => {
   const theme = useTheme() as AppTheme;
+  const { isDarkMode } = useAppTheme();
+  
+  const effectiveGradientColors = gradientColors || (isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const);
 
   return (
     <View style={styles.cardWrapper}>
       <GradientCard
-        colors={gradientColors}
+        colors={effectiveGradientColors}
         style={styles.card}
         mode="elevated"
       >
-        <BlurView intensity={15} tint="light" style={styles.blurContainer}>
+        <BlurView intensity={isDarkMode ? 20 : 15} tint={isDarkMode ? "dark" : "light"} style={styles.blurContainer}>
           <View style={styles.content}>
             <View style={styles.header}>
               <View style={styles.titleContainer}>

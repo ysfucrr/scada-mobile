@@ -30,10 +30,12 @@ const AnalyzerCard: React.FC<AnalyzerCardProps> = ({
   const theme = useTheme() as AppTheme;
   const { isDarkMode } = useAppTheme();
   
+  const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
+  
   return (
     <View style={styles.cardWrapper}>
       <GradientCard
-        colors={['#1E88E5', '#42A5F5']}
+        colors={gradientColors}
         style={styles.analyzerCard}
         mode="elevated"
         onPress={onPress}
