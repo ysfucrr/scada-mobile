@@ -17,6 +17,7 @@ import {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Screens
+import BillingScreen from './screens/BillingScreen';
 import ConsumptionScreen from './screens/ConsumptionScreen';
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -624,6 +625,7 @@ function MainApp() {
     { name: 'Home', icon: 'home', title: 'Home' },
     { name: 'Registers', icon: 'format-list-bulleted', title: 'Registers' },
     { name: 'Consumption', icon: 'chart-bar', title: 'Consumption' },
+    { name: 'Billing', icon: 'receipt', title: 'Billing' },
     { name: 'Logs', icon: 'chart-line', title: 'Logs' },
     { name: 'Settings', icon: 'cog', title: 'Settings' },
   ];
@@ -727,6 +729,8 @@ function MainApp() {
         return <RegistersScreen isActive={currentScreen === 'Registers'} />;
       case 'Consumption':
         return <ConsumptionScreen />;
+      case 'Billing':
+        return <BillingScreen />;
       case 'Logs':
         return <LogsScreen />;
       default:

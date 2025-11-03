@@ -866,6 +866,44 @@ class ApiService {
     }
   }
 
+  async getBillings(): Promise<any[]> {
+    try {
+      await this.initialize();
+      
+      let data;
+      
+      if (this.useCloudBridge) {
+        // Cloud Bridge üzerinden istek yap
+        data = await this.fetchViaCloudBridge('/billings');
+      } else {
+        // Doğrudan SCADA API'sine istek yap
+        const response = await fetch(`${this.baseUrl}/api/mobile/billings`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        data = await response.json();
+      }
+      
+      if (!data.success || !data.billings) {
+        console.warn('No billings found in response:', data);
+        return [];
+      }
+      
+      console.log(`Loaded ${data.billings.length} billings`);
+      return data.billings;
+    } catch (error) {
+      console.error('Error fetching billings:', error);
+      return [];
+    }
+  }
+
 }
 
 export default new ApiService();
