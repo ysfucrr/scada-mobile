@@ -15,7 +15,6 @@ import {
   Dimensions
 } from 'react-native';
 import { ActivityIndicator, useTheme as usePaperTheme } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
@@ -445,7 +444,7 @@ export default function BillingScreen() {
 
   if (!isConnected) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
+      <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
         <StatusBar style={isDarkMode ? 'light' : 'dark'} />
         <View style={styles.centerContainer}>
           <MaterialCommunityIcons
@@ -460,13 +459,13 @@ export default function BillingScreen() {
             Please connect to the server from Settings
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
+      <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
         <StatusBar style={isDarkMode ? 'light' : 'dark'} />
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={paperTheme.colors.primary} />
@@ -474,12 +473,12 @@ export default function BillingScreen() {
             Loading billings...
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
+    <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       <Animated.View
@@ -528,7 +527,7 @@ export default function BillingScreen() {
           />
         )}
       </Animated.View>
-    </SafeAreaView>
+    </View>
   );
 }
 
