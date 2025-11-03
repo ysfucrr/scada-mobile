@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -294,6 +294,70 @@ export default function LogEntriesScreen({ trendLog, onBack }: LogEntriesScreenP
     setDataLoaded(false);
     setEntries([]);
   };
+
+  // Auto-load today's data on mount
+  useEffect(() => {
+    const today = new Date();
+    const todayStart = new Date(today);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    setStartDate(todayStart);
+    setEndDate(todayEnd);
+    
+    // Load entries with today's date
+    setIsLoading(true);
+    const loadTodayEntries = async () => {
+      try {
+        const data = await ApiService.getTrendLogEntries(trendLog._id, {
+          startDate: todayStart.toISOString(),
+          endDate: todayEnd.toISOString()
+        });
+        
+        if (data && data.success) {
+          // Process compact format if available
+          if (data.dataFormat === "compact" && Array.isArray(data.entries)) {
+            // Convert compact format to standard format
+            const processedEntries: LogEntry[] = data.entries.map((entry: CompactLogEntry, index: number) => {
+              const timestamp = new Date(entry[0]);
+              return {
+                _id: `entry-${index}-${entry[0]}`,
+                value: entry[1],
+                timestamp: timestamp.toISOString(),
+                timestampMs: entry[0]
+              };
+            });
+            
+            // Sort by timestamp (newest first)
+            const sortedEntries = processedEntries.sort((a: LogEntry, b: LogEntry) => b.timestampMs - a.timestampMs);
+            setEntries(sortedEntries);
+          }
+          // Support legacy format as well
+          else if (data.entries) {
+            const sortedEntries = data.entries.sort((a: LogEntry, b: LogEntry) =>
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+            setEntries(sortedEntries);
+          } else {
+            setEntries([]);
+          }
+          setDataLoaded(true);
+        } else {
+          setEntries([]);
+          setDataLoaded(true);
+        }
+      } catch (error) {
+        console.error('Error loading today log entries:', error);
+        setEntries([]);
+        setDataLoaded(true);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadTodayEntries();
+  }, [trendLog._id]); // Only run once when component mounts
 
   return (
     <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
