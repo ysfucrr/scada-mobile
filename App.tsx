@@ -24,6 +24,7 @@ import LoginScreen from './screens/LoginScreen';
 import LogsScreen from './screens/LogsScreen';
 import RegistersScreen from './screens/RegistersScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import SystemLogsScreen from './screens/SystemLogsScreen';
 
 // Contexts
 import { ConnectionProvider } from './context/ConnectionContext';
@@ -627,6 +628,7 @@ function MainApp() {
     { name: 'Consumption', icon: 'chart-bar', title: 'Consumption' },
     { name: 'Billing', icon: 'receipt', title: 'Billing' },
     { name: 'Logs', icon: 'chart-line', title: 'Logs' },
+    { name: 'SystemLogs', icon: 'file-document', title: 'System Logs' },
     { name: 'Settings', icon: 'cog', title: 'Settings' },
   ];
 
@@ -733,6 +735,8 @@ function MainApp() {
         return <BillingScreen />;
       case 'Logs':
         return <LogsScreen />;
+      case 'SystemLogs':
+        return <SystemLogsScreen />;
       default:
         return <HomeScreen />;
     }

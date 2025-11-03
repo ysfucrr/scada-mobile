@@ -904,6 +904,70 @@ class ApiService {
     }
   }
 
+  async getSystemLogs(options?: {
+    level?: string;
+    source?: string;
+    search?: string;
+    limit?: number;
+  }): Promise<any> {
+    try {
+      await this.initialize();
+      
+      // Query parametrelerini oluştur
+      const params = new URLSearchParams();
+      if (options?.level) params.append('level', options.level);
+      if (options?.source) params.append('source', options.source);
+      if (options?.search) params.append('search', options.search);
+      if (options?.limit) params.append('limit', options.limit.toString());
+      
+      const queryString = params.toString();
+      const path = `/system-logs${queryString ? `?${queryString}` : ''}`;
+      
+      let data;
+      
+      if (this.useCloudBridge) {
+        // Cloud Bridge üzerinden istek yap
+        data = await this.fetchViaCloudBridge(path);
+      } else {
+        // Doğrudan SCADA API'sine istek yap
+        const url = `${this.baseUrl}/api/mobile/system-logs${queryString ? `?${queryString}` : ''}`;
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        data = await response.json();
+      }
+      
+      if (!data.success || !data.logs) {
+        console.warn('No system logs found in response:', data);
+        return {
+          logs: [],
+          total: 0,
+          filtered: 0,
+          returned: 0
+        };
+      }
+      
+      console.log(`Loaded ${data.returned} system logs (${data.filtered} filtered from ${data.total} total)`);
+      return data;
+    } catch (error) {
+      console.error('Error fetching system logs:', error);
+      return {
+        logs: [],
+        total: 0,
+        filtered: 0,
+        returned: 0
+      };
+    }
+  }
+
 }
 
 export default new ApiService();
