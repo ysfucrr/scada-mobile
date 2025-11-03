@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -6,7 +7,6 @@ import { Animated, Dimensions, Modal, StyleSheet, TouchableOpacity, View } from 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   Appbar,
-  Avatar,
   Divider,
   List,
   Provider as PaperProvider,
@@ -78,6 +78,7 @@ function MainApp() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showSplash, setShowSplash] = useState(true);
+  const [agentName, setAgentName] = useState<string>('SCADA Mobile');
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -290,6 +291,38 @@ function MainApp() {
       clearTimeout(splashTimer);
     };
   }, []);
+
+  // Load agent name from AsyncStorage
+  useEffect(() => {
+    const loadAgentName = async () => {
+      try {
+        // Try to get from currentSelectedAgent first (LoginScreen saves it here)
+        const currentAgent = await AsyncStorage.getItem('currentSelectedAgent');
+        if (currentAgent) {
+          const agent = JSON.parse(currentAgent);
+          if (agent.name) {
+            setAgentName(agent.name);
+            return;
+          }
+        }
+        
+        // Fallback to selectedAgentName (WebSocketContext saves it here)
+        const agentName = await AsyncStorage.getItem('selectedAgentName');
+        if (agentName) {
+          setAgentName(agentName);
+          return;
+        }
+        
+        // Default to 'SCADA Mobile' if no agent name found
+        setAgentName('SCADA Mobile');
+      } catch (error) {
+        console.error('[App] Error loading agent name:', error);
+        setAgentName('SCADA Mobile');
+      }
+    };
+
+    loadAgentName();
+  }, [isAuthenticated, isMenuVisible]);
 
   const checkInitialSetup = async () => {
     try {
@@ -787,17 +820,11 @@ function MainApp() {
             {/* Header with gradient background */}
             <View style={[styles.menuHeader, { backgroundColor: theme.colors.primary }]}>
               <View style={styles.headerContent}>
-                <Avatar.Icon 
-                  size={40} 
-                  icon="monitor-dashboard" 
-                  style={{backgroundColor: theme.colors.primaryContainer}}
-                  color={theme.colors.onPrimaryContainer}
-                />
                 <Text 
                   variant="headlineSmall" 
                   style={[styles.menuTitle, { color: theme.colors.onPrimary }]}
                 >
-                  SCADA Mobile
+                  {agentName}
                 </Text>
               </View>
               <TouchableOpacity
@@ -1152,12 +1179,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerContent: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   menuTitle: {
-    marginLeft: 12,
     fontWeight: '700',
+    textAlign: 'center',
   },
   closeButton: {
     padding: 8,

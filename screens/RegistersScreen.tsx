@@ -15,7 +15,7 @@ import {
   Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Card, IconButton, useTheme as usePaperTheme } from 'react-native-paper';
+import { ActivityIndicator, Card, IconButton, useTheme as usePaperTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientCard from '../components/GradientCard';
 import WriteRegisterModal from '../components/WriteRegisterModal';
@@ -663,6 +663,21 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     );
   }
 
+  // Show loading overlay while data is being loaded
+  if (isLoading && groupedRegisters.size === 0 && viewMode === 'analyzers') {
+    return (
+      <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={paperTheme.colors.primary} />
+          <Text style={[styles.loadingText, { color: paperTheme.colors.onSurface }]}>
+            Loading registers...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   if (viewMode === 'analyzers') {
     // Analizörleri kaydedilmiş sıralamaya göre düzenle
     const sortedAnalyzers = analyzerOrder
@@ -704,7 +719,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
                 No analyzers found
               </Text>
               <Text style={[styles.emptySubtext, {color: paperTheme.colors.outline}]}>
-                {isLoading ? 'Loading...' : 'Pull down to refresh'}
+                Pull down to refresh
               </Text>
             </View>
           }
@@ -1223,6 +1238,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: 'white',
+  },
+  
+  // Loading Styles
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '500',
   },
   
   // Empty State Styles

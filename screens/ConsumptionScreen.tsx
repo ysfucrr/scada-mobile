@@ -17,7 +17,7 @@ import {
   Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Card, useTheme as usePaperTheme } from 'react-native-paper';
+import { ActivityIndicator, Card, useTheme as usePaperTheme } from 'react-native-paper';
 import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
@@ -712,6 +712,25 @@ export default function ConsumptionScreen() {
     );
   }
 
+  // Show loading overlay while data is being loaded
+  // Check if loading or if widgets exist but data hasn't loaded yet
+  const hasWidgetData = widgets.length > 0 && (widgetMonthlyData.size > 0 || widgetYearlyData.size > 0);
+  const shouldShowLoading = isLoading || (widgets.length > 0 && !hasWidgetData);
+  
+  if (shouldShowLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={paperTheme.colors.primary} />
+          <Text style={[styles.loadingText, { color: paperTheme.colors.onSurface }]}>
+            Loading consumption data...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
@@ -747,7 +766,7 @@ export default function ConsumptionScreen() {
                 No consumption widgets found
               </Text>
               <Text style={[styles.emptySubtext, { color: paperTheme.colors.outline }]}>
-                {isLoading ? 'Loading...' : 'Pull down to refresh'}
+                Pull down to refresh
               </Text>
             </View>
           }
@@ -1079,6 +1098,19 @@ const styles = StyleSheet.create({
   noDataText: {
     fontSize: 16,
     marginTop: 12,
+  },
+  
+  // Loading Styles
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 80,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '500',
   },
   
   // Empty State Styles
