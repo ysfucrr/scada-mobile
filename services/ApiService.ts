@@ -248,8 +248,13 @@ class ApiService {
         body: JSON.stringify(requestBody)
       });
       
+      // Response body'yi bir kere oku (hata durumunda da kullanılabilir)
+      const jsonData = await response.json();
+      
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Try to extract error message from response
+        const errorMessage = jsonData.error || jsonData.message || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
       }
       
       // Response'un content-encoding başlığını kontrol et
@@ -261,8 +266,6 @@ class ApiService {
       
       // Sıkıştırma formatı ve boyut bilgisi
       console.log(`Response received with encoding: ${contentEncoding || 'none'}`);
-      
-      const jsonData = await response.json();
       
       // Tahmini ham JSON boyutu (yaklaşık hesaplama)
       const rawSize = JSON.stringify(jsonData).length;
@@ -965,6 +968,34 @@ class ApiService {
         filtered: 0,
         returned: 0
       };
+    }
+  }
+
+  async getPeriodicReports(): Promise<any[]> {
+    try {
+      await this.initialize();
+      let data;
+      if (this.useCloudBridge) {
+        data = await this.fetchViaCloudBridge('/periodic-reports');
+      } else {
+        const response = await fetch(`${this.baseUrl}/api/mobile/periodic-reports`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        data = await response.json();
+      }
+      if (!data.success || !data.reports) {
+        console.warn('No periodic reports found in response:', data);
+        return [];
+      }
+      console.log(`Loaded ${data.reports.length} periodic reports`);
+      return data.reports;
+    } catch (error) {
+      console.error('Error fetching periodic reports:', error);
+      return [];
     }
   }
 

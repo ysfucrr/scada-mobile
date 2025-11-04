@@ -22,6 +22,7 @@ import ConsumptionScreen from './screens/ConsumptionScreen';
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import LogsScreen from './screens/LogsScreen';
+import PeriodicReportsScreen from './screens/PeriodicReportsScreen';
 import RegistersScreen from './screens/RegistersScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import SystemLogsScreen from './screens/SystemLogsScreen';
@@ -629,6 +630,7 @@ function MainApp() {
     { name: 'Billing', icon: 'receipt', title: 'Billing' },
     { name: 'Logs', icon: 'chart-line', title: 'Logs' },
     { name: 'SystemLogs', icon: 'file-document', title: 'System Logs' },
+    { name: 'PeriodicReports', icon: 'file-document-outline', title: 'Periodic Reports' },
     { name: 'Settings', icon: 'cog', title: 'Settings' },
   ];
 
@@ -737,6 +739,8 @@ function MainApp() {
         return <LogsScreen />;
       case 'SystemLogs':
         return <SystemLogsScreen />;
+      case 'PeriodicReports':
+        return <PeriodicReportsScreen />;
       default:
         return <HomeScreen />;
     }
