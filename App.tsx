@@ -23,6 +23,7 @@ import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import LogsScreen from './screens/LogsScreen';
 import PeriodicReportsScreen from './screens/PeriodicReportsScreen';
+import PrivacyPolicyScreen from './screens/PrivacyPolicyScreen';
 import RegistersScreen from './screens/RegistersScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import SystemLogsScreen from './screens/SystemLogsScreen';
@@ -528,70 +529,12 @@ function MainApp() {
             },
           ]}
         >
-          {/* Modern Central Logo with Geometric Shapes */}
-          <Animated.View
-            style={[
-              styles.ultraModernLogoContainer,
-              {
-                transform: [
-                  { scale: logoScaleAnim },
-                  { rotate: logoRotation },
-                ],
-              },
-            ]}
-          >
-            {/* Geometric Shape 1 - Hexagon */}
-            <Animated.View
-              style={[
-                styles.geometricShape,
-                styles.hexagonShape,
-                {
-                  transform: [{ rotate: shape1Rotation }],
-                  opacity: geometricShape1Anim,
-                },
-              ]}
-            />
-            
-            {/* Geometric Shape 2 - Circle */}
-            <Animated.View
-              style={[
-                styles.geometricShape,
-                styles.circleShape,
-                {
-                  transform: [{ rotate: shape2Rotation }],
-                  opacity: geometricShape2Anim,
-                },
-              ]}
-            />
-            
-            {/* Geometric Shape 3 - Triangle */}
-            <Animated.View
-              style={[
-                styles.geometricShape,
-                styles.triangleShape,
-                {
-                  transform: [{ rotate: shape3Rotation }],
-                  opacity: geometricShape3Anim,
-                },
-              ]}
-            />
-            
-            {/* Central Pulse Dot */}
-            <Animated.View
-              style={[
-                styles.centralPulse,
-                {
-                  transform: [{ scale: pulseAnim }],
-                },
-              ]}
-            />
-          </Animated.View>
-          
           {/* Modern Title & Subtitle */}
           <Animated.View
             style={{
               opacity: textFadeAnim,
               transform: [{ translateY: textSlideAnim }],
+              alignItems: 'center',
             }}
           >
             <Text style={styles.ultraModernTitle}>SCADA Mobile</Text>
@@ -632,6 +575,7 @@ function MainApp() {
     { name: 'SystemLogs', icon: 'file-document', title: 'System Logs' },
     { name: 'PeriodicReports', icon: 'file-document-outline', title: 'Periodic Reports' },
     { name: 'Settings', icon: 'cog', title: 'Settings' },
+    { name: 'PrivacyPolicy', icon: 'shield-check', title: 'Privacy Policy' },
   ];
 
   const handleMenuSelect = (screenName: string) => {
@@ -721,6 +665,10 @@ function MainApp() {
       return <SettingsScreen onConnectionSuccess={handleConnectionSuccess} />;
     }
     
+    if (currentScreen === 'PrivacyPolicy') {
+      return <PrivacyPolicyScreen />;
+    }
+    
     // Diğer ekranlar authentication gerektirir
     if (!isAuthenticated) {
       return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
@@ -755,7 +703,7 @@ function MainApp() {
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       {/* Header'ı sadece authenticated kullanıcılar için göster */}
-      {(isAuthenticated || currentScreen === 'Settings') && (
+      {(isAuthenticated || currentScreen === 'Settings' || currentScreen === 'PrivacyPolicy') && (
         <Appbar.Header
           style={{
             backgroundColor: theme.colors.primary,
@@ -852,8 +800,8 @@ function MainApp() {
             <View style={styles.menuContent}>
               {/* Menu Items with Material Design 3 styling */}
               {menuItems.map((item) => {
-                // Settings her zaman görünür, diğerleri sadece authenticated ise
-                if (item.name !== 'Settings' && !isAuthenticated) {
+                // Settings ve Privacy Policy her zaman görünür, diğerleri sadece authenticated ise
+                if (item.name !== 'Settings' && item.name !== 'PrivacyPolicy' && !isAuthenticated) {
                   return null;
                 }
                 
@@ -1100,6 +1048,7 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(66, 165, 245, 0.5)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 20,
+    textAlign: 'center',
   },
   ultraModernSubtitle: {
     fontSize: 12,
@@ -1108,6 +1057,7 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     fontWeight: '300',
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   // Ultra Modern Loading Indicator
   ultraModernLoadingContainer: {

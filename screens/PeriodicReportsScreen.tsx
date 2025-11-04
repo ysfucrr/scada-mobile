@@ -249,7 +249,7 @@ export default function PeriodicReportsScreen() {
 
     const maxHeight = expandAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, 350],
+      outputRange: [0, 200],
     });
 
     const isGenerating = generatingReport === report._id;
@@ -696,7 +696,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   previewButton: {
-    backgroundColor: 'rgba(66, 165, 245, 0.3)',
+    backgroundColor: 'rgba(66, 111, 245, 0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(66, 165, 245, 0.7)',
   },
   generateButton: {
     backgroundColor: 'rgba(76, 175, 80, 0.3)',
