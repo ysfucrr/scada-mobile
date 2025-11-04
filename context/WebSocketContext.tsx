@@ -90,6 +90,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   useEffect(() => {
     const initializeWebSocket = async () => {
       try {
+        // Demo mode kontrolü - WebSocket bağlantısı kurma
+        const demoMode = await AsyncStorage.getItem('demoMode');
+        if (demoMode === 'true') {
+          console.log('[SocketIO] Demo mode: skipping WebSocket initialization');
+          setIsConnected(true);
+          setConnectionState('connected');
+          return;
+        }
+        
         // Check if there was a reset request
         const resetRequest = await AsyncStorage.getItem('ws_connection_reset_request');
         
@@ -118,7 +127,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         await new Promise(resolve => setTimeout(resolve, 2000)); // API bağlantısının kurulmasını bekle
         await connect();
       } catch (error) {
-        console.error('Initial WebSocket connection failed:', error);
+        // Demo mode'da hata loglamayı atla
+        const demoMode = await AsyncStorage.getItem('demoMode');
+        if (demoMode !== 'true') {
+          console.error('Initial WebSocket connection failed:', error);
+        }
       }
     };
 
@@ -128,6 +141,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     const checkForAgentChanges = async () => {
       try {
         const intervalId = setInterval(async () => {
+          // Demo mode kontrolü - agent change kontrolü yapma
+          const demoMode = await AsyncStorage.getItem('demoMode');
+          if (demoMode === 'true') {
+            return; // Demo mode'da agent change kontrolü yapma
+          }
+          
           const agentChanged = await AsyncStorage.getItem('agent_changed_event');
           if (agentChanged) {
             const timestamp = parseInt(agentChanged);
@@ -173,7 +192,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         
         return () => clearInterval(intervalId);
       } catch (error) {
-        console.error('Error checking for agent changes:', error);
+        // Demo mode kontrolü - hata loglamayı atla
+        const demoMode = await AsyncStorage.getItem('demoMode');
+        if (demoMode !== 'true') {
+          console.error('Error checking for agent changes:', error);
+        }
         return () => {};
       }
     };
@@ -200,6 +223,15 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
   const connect = useCallback(async () => {
     try {
+      // Demo modu kontrolü - WebSocket bağlantısı kurma
+      const demoMode = await AsyncStorage.getItem('demoMode');
+      if (demoMode === 'true') {
+        console.log('[WebSocketContext] Demo mode: skipping WebSocket connection');
+        setIsConnected(true);
+        setConnectionState('connected');
+        return;
+      }
+
       // Mevcut bağlantıyı kapat
       if (socketRef.current) {
         socketRef.current.disconnect();
@@ -311,24 +343,32 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         }
       });
 
-      newSocket.on('disconnect', (reason) => {
-        console.warn(`[SocketIO] Disconnected: ${reason}`);
-        setIsConnected(false);
-        setConnectionState('disconnected');
-        
-        // Otomatik yeniden bağlanma
-        if (reason !== 'io client disconnect') {
-          scheduleReconnect();
+      newSocket.on('disconnect', async (reason) => {
+        // Demo mode kontrolü - disconnect mesajını gösterme ve reconnect yapma
+        const demoMode = await AsyncStorage.getItem('demoMode');
+        if (demoMode !== 'true') {
+          console.warn(`[SocketIO] Disconnected: ${reason}`);
+          setIsConnected(false);
+          setConnectionState('disconnected');
+          
+          // Otomatik yeniden bağlanma
+          if (reason !== 'io client disconnect') {
+            scheduleReconnect();
+          }
         }
       });
 
-      newSocket.on('connect_error', (err) => {
-        console.error('[SocketIO] Connection Error:', err.message);
-        setIsConnected(false);
-        setConnectionState('disconnected');
-        
-        // Otomatik yeniden bağlanma
-        scheduleReconnect();
+      newSocket.on('connect_error', async (err) => {
+        // Demo mode kontrolü - hata mesajını gösterme
+        const demoMode = await AsyncStorage.getItem('demoMode');
+        if (demoMode !== 'true') {
+          console.error('[SocketIO] Connection Error:', err.message);
+          setIsConnected(false);
+          setConnectionState('disconnected');
+          
+          // Otomatik yeniden bağlanma
+          scheduleReconnect();
+        }
       });
 
       newSocket.on('register-value', (data: RegisterValue) => {
@@ -434,20 +474,31 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     });
   }, []);
 
-  const scheduleReconnect = useCallback(() => {
+  const scheduleReconnect = useCallback(async () => {
+    // Demo mode kontrolü - reconnect yapma
+    const demoMode = await AsyncStorage.getItem('demoMode');
+    if (demoMode === 'true') {
+      console.log('[SocketIO] Demo mode: skipping reconnect');
+      return;
+    }
+    
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
     
-    reconnectTimeoutRef.current = setTimeout(() => {
+    reconnectTimeoutRef.current = setTimeout(async () => {
       console.log('[SocketIO] Attempting to reconnect...');
-      connect().catch(error => {
-        console.error('[SocketIO] Reconnection failed:', error);
-        // 15 saniye sonra tekrar dene
-        scheduleReconnect();
+      connect().catch(async (error) => {
+        // Demo mode kontrolü - hata mesajını gösterme
+        const demoMode = await AsyncStorage.getItem('demoMode');
+        if (demoMode !== 'true') {
+          console.error('[SocketIO] Reconnection failed:', error);
+          // 15 saniye sonra tekrar dene
+          scheduleReconnect();
+        }
       });
     }, 15000) as any; // 15 saniye bekle
-  }, []);
+  }, [connect]);
 
   // Bağlantıyı kapat ve tüm verileri temizle
   const disconnect = useCallback(async () => {

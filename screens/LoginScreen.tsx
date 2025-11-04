@@ -205,7 +205,47 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
       Alert.alert('Error', 'Username and password are required');
       return;
     }
+
+    // Demo modu kontrolü
+    const demoMode = await AsyncStorage.getItem('demoMode');
+    const isDemoMode = demoMode === 'true';
     
+    // Demo modu aktifse ve kullanıcı demo/demo girerse
+    if (isDemoMode && username.toLowerCase() === 'demo' && password.toLowerCase() === 'demo') {
+      setIsLoading(true);
+      try {
+        console.log('[LoginScreen] Demo mode login detected');
+        
+        // Demo kullanıcı objesi oluştur
+        const demoUser = {
+          _id: 'demo-user-id',
+          username: 'demo',
+          email: 'demo@scada-mobile.com',
+          role: 'user',
+          name: 'Demo User'
+        };
+        
+        // AuthService'e demo kullanıcıyı kaydet (basit bir şekilde)
+        await AsyncStorage.setItem('demoUser', JSON.stringify(demoUser));
+        await AsyncStorage.setItem('isLoggedIn', 'true');
+        
+        // Demo modu için bağlantı kurma (gerçek bağlantı olmadan)
+        console.log('[LoginScreen] Demo mode login successful');
+        
+        // Login başarılı - Home'a git
+        if (onLoginSuccess) {
+          onLoginSuccess();
+        }
+      } catch (error: any) {
+        console.error('[LoginScreen] Demo login error:', error);
+        Alert.alert('Error', 'Demo login failed. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+    
+    // Normal login akışı
     if (agents.length > 0 && !selectedAgent) {
       Alert.alert('Error', 'Please select a SCADA system to connect to');
       return;
@@ -214,6 +254,9 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
     setIsLoading(true);
     try {
       console.log(`[LoginScreen] Starting login process with agent: ${selectedAgent?.id} (${selectedAgent?.name})`);
+      
+      // Demo modunu kapat (normal login)
+      await AsyncStorage.removeItem('demoMode');
       
       // First, reset any existing connections to ensure a clean start
       console.log('[LoginScreen] Resetting API service connections before login');

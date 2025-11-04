@@ -1,5 +1,6 @@
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -27,9 +28,10 @@ import AuthService from '../services/AuthService';
 
 interface SettingsScreenProps {
   onConnectionSuccess?: () => void;
+  onUseDemo?: () => void;
 }
 
-export default function SettingsScreen({ onConnectionSuccess }: SettingsScreenProps = {}) {
+export default function SettingsScreen({ onConnectionSuccess, onUseDemo }: SettingsScreenProps = {}) {
   const paperTheme = usePaperTheme();
   const { isDarkMode } = useAppTheme();
   const { settings, updateSettings, isConnected, disconnect } = useConnection();
@@ -46,8 +48,29 @@ export default function SettingsScreen({ onConnectionSuccess }: SettingsScreenPr
     }
   }, [settings]);
 
+  const handleUseDemo = async () => {
+    try {
+      // Demo modunu aktif et (server domain'i değiştirmeden)
+      await AsyncStorage.setItem('demoMode', 'true');
+      
+      // Mevcut ayarları koru, sadece demo modunu aktif et
+      // Server domain'i değiştirmiyoruz
+      
+      // Login ekranına yönlendir
+      if (onUseDemo) {
+        onUseDemo();
+      }
+    } catch (error) {
+      console.error('Error setting up demo mode:', error);
+      Alert.alert('Error', 'Failed to setup demo mode. Please try again.');
+    }
+  };
+
   const handleSaveAndConnect = async () => {
     try {
+      // Demo modunu kapat (normal moda geçiş)
+      await AsyncStorage.removeItem('demoMode');
+      
       // Önce ayarları kaydet
       const newSettings: ServerSettings = {
         serverHost,
@@ -290,6 +313,23 @@ export default function SettingsScreen({ onConnectionSuccess }: SettingsScreenPr
           </BlurView>
         </GradientCard>
 
+        {/* Use Demo Button */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.demoButton, { backgroundColor: '#FF9800' }]}
+            onPress={handleUseDemo}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="play-circle-outline"
+              size={24}
+              color="white"
+              style={styles.buttonIcon}
+            />
+            <Text style={styles.buttonText}>Use Demo</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Action Button */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
@@ -506,6 +546,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
+  },
+  demoButton: {
+    marginBottom: 12,
   },
   buttonIcon: {
     marginRight: 8,

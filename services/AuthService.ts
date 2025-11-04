@@ -136,6 +136,11 @@ class AuthService {
       const currentAgentId = this.selectedAgentId;
       console.log(`[AuthService] Logout - Current agent ID: ${currentAgentId}`);
       
+      // Demo modunu temizle
+      await AsyncStorage.removeItem('demoMode');
+      await AsyncStorage.removeItem('demoUser');
+      await AsyncStorage.removeItem('isLoggedIn');
+      
       // We won't try to send a server-side logout request as it's not necessary and causing errors
       // Just perform client-side logout
       
@@ -200,7 +205,17 @@ class AuthService {
   }
 
   // Mevcut kullanıcıyı getir
-  getCurrentUser(): User | null {
+  async getCurrentUser(): Promise<User | null> {
+    // Demo modu kontrolü
+    try {
+      const demoMode = await AsyncStorage.getItem('demoMode');
+      const demoUser = await AsyncStorage.getItem('demoUser');
+      if (demoMode === 'true' && demoUser) {
+        return JSON.parse(demoUser);
+      }
+    } catch (error) {
+      console.error('Error checking demo user:', error);
+    }
     return this.currentUser;
   }
   
@@ -234,6 +249,13 @@ class AuthService {
   // Login durumunu kontrol et
   async isLoggedIn(): Promise<boolean> {
     try {
+      // Demo modu kontrolü
+      const demoMode = await AsyncStorage.getItem('demoMode');
+      const isDemoLoggedIn = await AsyncStorage.getItem('isLoggedIn');
+      if (demoMode === 'true' && isDemoLoggedIn === 'true') {
+        return true;
+      }
+
       const rememberMe = await AsyncStorage.getItem('rememberMe');
       const savedUsername = await AsyncStorage.getItem('savedUsername');
       const savedPassword = await AsyncStorage.getItem('savedPassword');

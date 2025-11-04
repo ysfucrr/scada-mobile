@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
@@ -162,6 +163,35 @@ export default function PeriodicReportsScreen() {
       setPreviewLoading(true);
       setPreviewData(null);
 
+      // Demo modu kontrolü
+      const demoMode = await AsyncStorage.getItem('demoMode');
+      if (demoMode === 'true') {
+        // Demo modunda sahte preview verisi
+        const now = new Date();
+        const entries = [];
+        // Son 24 saat için örnek veriler
+        for (let i = 0; i < 24; i++) {
+          entries.push({
+            timestamp: new Date(now.getTime() - i * 60 * 60 * 1000).toISOString(),
+            value: Math.round((850 + Math.random() * 200) * 10) / 10, // 850-1050 kWh arası
+          });
+        }
+        
+        setPreviewData({
+          subject: `${report.description} - ${new Date().toLocaleDateString()}`,
+          recipients: ['demo@example.com', 'admin@example.com'],
+          trendLogs: [
+            {
+              title: 'Demo Energy Meter',
+              entries: entries.reverse(), // En eski tarihten en yeniye
+            },
+          ],
+          date: now.toISOString(),
+        });
+        setPreviewLoading(false);
+        return;
+      }
+
       await ApiService.initialize();
       const apiService = ApiService as any;
       
@@ -197,6 +227,16 @@ export default function PeriodicReportsScreen() {
   const handleGenerate = async (report: PeriodicReportType) => {
     try {
       setGeneratingReport(report._id);
+      
+      // Demo modu kontrolü
+      const demoMode = await AsyncStorage.getItem('demoMode');
+      if (demoMode === 'true') {
+        // Demo modunda sahte başarı mesajı
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Simüle edilmiş gecikme
+        Alert.alert('Success', 'Report generated and sent successfully (Demo Mode)');
+        setGeneratingReport(null);
+        return;
+      }
       
       await ApiService.initialize();
       const apiService = ApiService as any;

@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Dimensions, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   Appbar,
@@ -83,6 +83,7 @@ function MainApp() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showSplash, setShowSplash] = useState(true);
   const [agentName, setAgentName] = useState<string>('SCADA Mobile');
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -296,10 +297,20 @@ function MainApp() {
     };
   }, []);
 
-  // Load agent name from AsyncStorage
+  // Load agent name and demo mode from AsyncStorage
   useEffect(() => {
     const loadAgentName = async () => {
       try {
+        // Demo modu kontrolü
+        const demoMode = await AsyncStorage.getItem('demoMode');
+        if (demoMode === 'true') {
+          setAgentName('Demo Mode');
+          setIsDemoMode(true);
+          return;
+        }
+        
+        setIsDemoMode(false);
+        
         // Try to get from currentSelectedAgent first (LoginScreen saves it here)
         const currentAgent = await AsyncStorage.getItem('currentSelectedAgent');
         if (currentAgent) {
@@ -322,6 +333,7 @@ function MainApp() {
       } catch (error) {
         console.error('[App] Error loading agent name:', error);
         setAgentName('SCADA Mobile');
+        setIsDemoMode(false);
       }
     };
 
@@ -331,6 +343,32 @@ function MainApp() {
   const checkInitialSetup = async () => {
     try {
       console.log('[App] Starting initial setup check...');
+      
+      // Demo mode kontrolü - eğer demo mode aktifse, normal akışı atla
+      const demoMode = await AsyncStorage.getItem('demoMode');
+      if (demoMode === 'true') {
+        console.log('[App] Demo mode active, checking demo authentication');
+        setIsDemoMode(true);
+        
+        // Demo kullanıcı kontrolü
+        const demoUser = await AsyncStorage.getItem('demoUser');
+        const isLoggedIn = await AsyncStorage.getItem('isLoggedIn');
+        
+        if (demoUser && isLoggedIn === 'true') {
+          // Demo kullanıcı zaten giriş yapmış, Home'a git
+          const user = JSON.parse(demoUser);
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          setCurrentScreen('Home');
+          await connect(); // Demo modunda bağlantıyı simüle et
+          console.log('[App] Demo mode user already logged in, redirecting to Home');
+        } else {
+          // Demo mode aktif ama kullanıcı giriş yapmamış, demo girişi yap
+          await handleUseDemo();
+        }
+        setIsLoading(false);
+        return;
+      }
       
       // 1. Önce server ayarları var mı kontrol et
       const serverSettings = await ApiService.getCurrentSettings();
@@ -371,7 +409,7 @@ function MainApp() {
         if (autoLoginSuccess) {
           // Otomatik login başarılı - ConnectionContext'i güncelle ve Home'a git
           await connect();
-          const user = AuthService.getCurrentUser();
+          const user = await AuthService.getCurrentUser();
           setCurrentUser(user);
           setIsAuthenticated(true);
           setCurrentScreen('Home');
@@ -408,8 +446,8 @@ function MainApp() {
     }
   };
 
-  const handleLoginSuccess = () => {
-    const user = AuthService.getCurrentUser();
+  const handleLoginSuccess = async () => {
+    const user = await AuthService.getCurrentUser();
     setCurrentUser(user);
     setIsAuthenticated(true);
     setCurrentScreen('Home');
@@ -420,6 +458,14 @@ function MainApp() {
   const handleConnectionSuccess = async () => {
     // Settings'den gelen başarılı bağlantı sonrası remember me kontrolü
     try {
+      // Demo mode'u temizle (Settings'te Save and Connect yapıldığında)
+      const demoMode = await AsyncStorage.getItem('demoMode');
+      if (demoMode === 'true') {
+        await AsyncStorage.removeItem('demoMode');
+        await AsyncStorage.removeItem('demoUser');
+        setIsDemoMode(false);
+      }
+      
       await connect();
       console.log('[App] Connection established from Settings');
       
@@ -431,7 +477,7 @@ function MainApp() {
         
         if (autoLoginSuccess) {
           // Otomatik login başarılı - direkt Home'a git
-          const user = AuthService.getCurrentUser();
+          const user = await AuthService.getCurrentUser();
           setCurrentUser(user);
           setIsAuthenticated(true);
           setCurrentScreen('Home');
@@ -449,6 +495,68 @@ function MainApp() {
     } catch (error) {
       console.error('[App] Error in handleConnectionSuccess:', error);
       setCurrentScreen('Login');
+    }
+  };
+
+  const handleUseDemo = async () => {
+    // Demo modu aktif, direkt demo girişi yap
+    console.log('[App] Demo mode activated, performing auto login');
+    
+    try {
+      // Demo kullanıcı objesi oluştur
+      const demoUser = {
+        _id: 'demo-user-id',
+        username: 'demo',
+        email: 'demo@scada-mobile.com',
+        role: 'user',
+        name: 'Demo User'
+      };
+      
+      // Demo kullanıcıyı kaydet
+      await AsyncStorage.setItem('demoUser', JSON.stringify(demoUser));
+      await AsyncStorage.setItem('isLoggedIn', 'true');
+      
+      // Kullanıcıyı set et ve Home'a git
+      setCurrentUser(demoUser);
+      setIsAuthenticated(true);
+      setIsDemoMode(true);
+      setCurrentScreen('Home');
+      
+      // ConnectionContext'i güncelle (demo modunda bağlı gibi davranır)
+      await connect();
+      
+      console.log('[App] Demo mode auto login successful');
+    } catch (error) {
+      console.error('[App] Demo mode auto login error:', error);
+      // Hata durumunda Login ekranına yönlendir
+      setCurrentScreen('Login');
+    }
+  };
+
+  const handleSwitchMode = async () => {
+    // Demo mode'dan çık ve Settings'e git
+    try {
+      console.log('[App] Switching from demo mode to settings');
+      
+      // Demo mode'u temizle
+      await AsyncStorage.removeItem('demoMode');
+      await AsyncStorage.removeItem('demoUser');
+      await AsyncStorage.removeItem('isLoggedIn');
+      
+      // State'leri temizle
+      setIsDemoMode(false);
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+      setAgentName('SCADA Mobile');
+      
+      // Settings sayfasına git
+      setCurrentScreen('Settings');
+      closeMenu();
+      
+      console.log('[App] Switched to settings successfully');
+    } catch (error) {
+      console.error('[App] Error switching mode:', error);
+      Alert.alert('Error', 'Failed to switch mode. Please try again.');
     }
   };
 
@@ -662,7 +770,7 @@ function MainApp() {
     }
     
     if (currentScreen === 'Settings') {
-      return <SettingsScreen onConnectionSuccess={handleConnectionSuccess} />;
+      return <SettingsScreen onConnectionSuccess={handleConnectionSuccess} onUseDemo={handleUseDemo} />;
     }
     
     if (currentScreen === 'PrivacyPolicy') {
@@ -800,7 +908,12 @@ function MainApp() {
             <View style={styles.menuContent}>
               {/* Menu Items with Material Design 3 styling */}
               {menuItems.map((item) => {
-                // Settings ve Privacy Policy her zaman görünür, diğerleri sadece authenticated ise
+                // Demo mode'da Settings'i gizle
+                if (isDemoMode && item.name === 'Settings') {
+                  return null;
+                }
+                
+                // Settings ve Privacy Policy her zaman görünür (demo mode hariç), diğerleri sadece authenticated ise
                 if (item.name !== 'Settings' && item.name !== 'PrivacyPolicy' && !isAuthenticated) {
                   return null;
                 }
@@ -838,8 +951,28 @@ function MainApp() {
                 );
               })}
               
-              {/* Sign Out button for authenticated users */}
-              {isAuthenticated && (
+              {/* Switch Mode button for demo mode users */}
+              {isDemoMode && (
+                <>
+                  <Divider style={{marginVertical: 8}} />
+                  <List.Item
+                    title="Switch Mode"
+                    style={styles.menuItem}
+                    titleStyle={styles.menuItemText}
+                    left={props => (
+                      <List.Icon
+                        {...props}
+                        icon="swap-horizontal"
+                        color={theme.colors.primary}
+                      />
+                    )}
+                    onPress={handleSwitchMode}
+                  />
+                </>
+              )}
+              
+              {/* Sign Out button for authenticated users (not in demo mode) */}
+              {isAuthenticated && !isDemoMode && (
                 <>
                   <Divider style={{marginVertical: 8}} />
                   <List.Item

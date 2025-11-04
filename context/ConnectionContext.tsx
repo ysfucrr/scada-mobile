@@ -66,6 +66,18 @@ export function ConnectionProvider({ children }: ConnectionProviderProps) {
   const connect = async () => {
     try {
       setIsLoading(true);
+      
+      // Demo modu kontrolü
+      const demoMode = await AsyncStorage.getItem('demoMode');
+      if (demoMode === 'true') {
+        // Demo modunda bağlı gibi davran
+        setIsConnected(true);
+        await refreshData();
+        console.log('[ConnectionContext] Demo mode: connection successful');
+        setIsLoading(false);
+        return;
+      }
+
       const connectionResult = await ApiService.testConnection();
       
       if (connectionResult) {

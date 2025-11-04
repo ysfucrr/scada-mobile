@@ -48,6 +48,38 @@ export interface SystemInfo {
   activeRegisters: number;
   alarms: number;
   lastUpdate: string;
+  mongodb?: {
+    dbStats: {
+      db: string;
+      collections: number;
+      views: number;
+      objects: number;
+      dataSize: number;
+      storageSize: number;
+      indexes: number;
+      indexSize: number;
+    };
+    collectionStats: Array<{
+      name: string;
+      size: number;
+      count: number;
+    }>;
+  };
+  system?: {
+    totalMemory: string;
+    freeMemory: string;
+    usedMemory: string;
+    memoryUsagePercent: string;
+    cpuCount: number;
+    cpuModel: string;
+    uptime: number;
+    platform: string;
+    hostname: string;
+    diskIOSpeeds: {
+      read: number;
+      write: number;
+    };
+  };
 }
 
 class ApiService {
@@ -56,6 +88,16 @@ class ApiService {
   private settings: ServerSettings | null = null;
   private useCloudBridge: boolean = false;
   private selectedAgentId: string | null = null;
+
+  // Demo modu kontrolü
+  private async isDemoMode(): Promise<boolean> {
+    try {
+      const demoMode = await AsyncStorage.getItem('demoMode');
+      return demoMode === 'true';
+    } catch (error) {
+      return false;
+    }
+  }
  
   async initialize(preserveAgentId: boolean = true) {
     console.log('[ApiService] Initializing service');
@@ -323,6 +365,52 @@ class ApiService {
 
   async getSystemInfo(): Promise<SystemInfo | null> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo system info');
+        return {
+          status: 'online',
+          uptime: 86400,
+          activeRegisters: 1,
+          alarms: 0,
+          lastUpdate: new Date().toISOString(),
+          mongodb: {
+            dbStats: {
+              db: 'scada-demo',
+              collections: 5,
+              views: 0,
+              objects: 1250,
+              dataSize: 50, // 50 MB (will be multiplied by 1024*1024 in HomeScreen)
+              storageSize: 64, // 64 MB
+              indexes: 8,
+              indexSize: 10485760, // 10 MB
+            },
+            collectionStats: [
+              { name: 'registers', size: 31457280, count: 500 },
+              { name: 'trendLogs', size: 15728640, count: 200 },
+              { name: 'billings', size: 4194304, count: 50 },
+              { name: 'users', size: 524288, count: 10 },
+              { name: 'systemLogs', size: 1048576, count: 1000 },
+            ],
+          },
+          system: {
+            totalMemory: '16.00',
+            freeMemory: '8.50',
+            usedMemory: '7.50',
+            memoryUsagePercent: '46.88',
+            cpuCount: 8,
+            cpuModel: 'Intel Core i7-9700K',
+            uptime: 86400, // 1 day in seconds
+            platform: 'Linux',
+            hostname: 'demo-scada-server',
+            diskIOSpeeds: {
+              read: 250.5,
+              write: 180.3,
+            },
+          },
+        };
+      }
+
       await this.initialize();
       
       if (this.useCloudBridge) {
@@ -352,6 +440,31 @@ class ApiService {
 
   async getRegisters(): Promise<RegisterData[]> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo register');
+        return [{
+          _id: 'demo-register-1',
+          name: 'Demo Temperature Sensor',
+          analyzerId: 'demo-analyzer-1',
+          analyzerName: 'Demo Analyzer',
+          address: 1001,
+          dataType: 'float',
+          scale: 1,
+          byteOrder: 'BE',
+          unit: '°C',
+          description: 'Demo temperature sensor for testing',
+          status: 'active',
+          buildingId: 'demo-building-1',
+          buildingName: 'Demo Building',
+          registerType: 'read',
+          offset: 0,
+          displayMode: 'decimal',
+          value: 25.5,
+          timestamp: new Date().toISOString(),
+        }];
+      }
+
       await this.initialize();
       
       let data;
@@ -411,6 +524,19 @@ class ApiService {
 
   async getAnalyzers(): Promise<AnalyzerData[]> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo analyzer');
+        return [{
+          _id: 'demo-analyzer-1',
+          name: 'Demo Analyzer',
+          type: 'tcp',
+          host: 'demo.local',
+          port: 502,
+          isActive: true,
+        }];
+      }
+
       await this.initialize();
       
       if (this.useCloudBridge) {
@@ -440,6 +566,23 @@ class ApiService {
 
   async getTrendLogs(analyzerId?: string): Promise<any[]> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo trend log');
+        return [{
+          _id: 'demo-trendlog-1',
+          name: 'Demo Trend Log',
+          registerId: 'demo-register-1',
+          registerName: 'Demo Temperature Sensor',
+          analyzerId: 'demo-analyzer-1',
+          analyzerName: 'Demo Analyzer',
+          unit: '°C',
+          frequency: 'hourly',
+          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          updatedAt: new Date().toISOString(),
+        }];
+      }
+
       await this.initialize();
       
       let data;
@@ -486,6 +629,35 @@ class ApiService {
     startDate?: string;
     endDate?: string;
   }): Promise<any> {
+    // Demo modu kontrolü
+    if (await this.isDemoMode()) {
+      console.log('[ApiService] Demo mode: returning demo trend log entries');
+      return {
+        success: true,
+        entries: [
+          {
+            _id: 'demo-entry-1',
+            value: 25.5,
+            timestamp: new Date().toISOString(),
+            timestampMs: Date.now(),
+          },
+          {
+            _id: 'demo-entry-2',
+            value: 26.0,
+            timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+            timestampMs: Date.now() - 60 * 60 * 1000,
+          },
+          {
+            _id: 'demo-entry-3',
+            value: 25.8,
+            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            timestampMs: Date.now() - 2 * 60 * 60 * 1000,
+          },
+        ],
+        dataFormat: 'standard',
+      };
+    }
+
     // Kullanıcının belirttiği orijinal seçenekleri koru
     const effectiveOptions = { ...options };
     
@@ -668,6 +840,40 @@ class ApiService {
 
   async getWidgets(): Promise<any[]> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo widget with registers');
+        return [{
+          _id: 'demo-widget-1',
+          title: 'Demo Temperature Widget',
+          name: 'Demo Temperature Widget',
+          registers: [
+            {
+              id: 'demo-register-1',
+              label: 'Temperature',
+              value: 25.5,
+              scaleUnit: '°C',
+              analyzerId: 'demo-analyzer-1',
+              address: 1001,
+              dataType: 'float',
+              isLive: true,
+            },
+            {
+              id: 'demo-register-2',
+              label: 'Humidity',
+              value: 65.2,
+              scaleUnit: '%',
+              analyzerId: 'demo-analyzer-1',
+              address: 1002,
+              dataType: 'float',
+              isLive: true,
+            },
+          ],
+          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          updatedAt: new Date().toISOString(),
+        }];
+      }
+
       await this.initialize();
       
       let data;
@@ -801,6 +1007,26 @@ class ApiService {
 
   async getConsumptionWidgets(): Promise<any[]> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo consumption widget');
+        return [{
+          _id: 'demo-consumption-widget-1',
+          title: 'Demo Energy Consumption',
+          name: 'Demo Energy Consumption',
+          trendLogId: 'demo-trendlog-1',
+          size: { width: 300, height: 200 },
+          appearance: {
+            fontFamily: 'default',
+            textColor: '#FFFFFF',
+            backgroundColor: '#1E88E5',
+            opacity: 1,
+          },
+          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          updatedAt: new Date().toISOString(),
+        }];
+      }
+
       await this.initialize();
       
       let data;
@@ -839,6 +1065,102 @@ class ApiService {
 
   async getTrendLogComparison(trendLogId: string, timeFilter: 'month' | 'year'): Promise<any> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo trend log comparison');
+        
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const previousYear = currentYear - 1;
+        
+        // Monthly comparison data
+        const previousMonthValue = 850.5; // kWh
+        const currentMonthValue = 920.3; // kWh
+        const previousMonthTimestamp = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const currentMonthTimestamp = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthlyPercentageChange = ((currentMonthValue - previousMonthValue) / previousMonthValue) * 100;
+        
+        // Yearly comparison data
+        const previousYearTotal = 10250.5; // kWh
+        const currentYearTotal = 11280.3; // kWh
+        const yearlyPercentageChange = ((currentYearTotal - previousYearTotal) / previousYearTotal) * 100;
+        
+        // Generate monthly data for both years
+        const currentYearMonthly: any[] = [];
+        const previousYearMonthly: any[] = [];
+        
+        for (let month = 0; month < 12; month++) {
+          // Current year - generate realistic values
+          const currentMonthValue = 850 + (Math.random() * 200); // 850-1050 kWh range
+          currentYearMonthly.push({
+            month: month + 1,
+            value: Math.round(currentMonthValue * 10) / 10,
+            timestamp: new Date(currentYear, month, 1),
+          });
+          
+          // Previous year - slightly lower values
+          const previousMonthValue = 800 + (Math.random() * 180); // 800-980 kWh range
+          previousYearMonthly.push({
+            month: month + 1,
+            value: Math.round(previousMonthValue * 10) / 10,
+            timestamp: new Date(previousYear, month, 1),
+          });
+        }
+        
+        if (timeFilter === 'month') {
+          return {
+            success: true,
+            comparison: {
+              previousValue: previousMonthValue,
+              currentValue: currentMonthValue,
+              previousTimestamp: previousMonthTimestamp,
+              currentTimestamp: currentMonthTimestamp,
+              percentageChange: monthlyPercentageChange,
+              timeFilter: 'month',
+            },
+            monthlyData: {
+              currentYear: currentYearMonthly,
+              previousYear: previousYearMonthly,
+              currentYearLabel: currentYear,
+              previousYearLabel: previousYear,
+            },
+            trendLog: {
+              _id: 'demo-trendlog-1',
+              registerId: 'demo-register-1',
+              analyzerId: 'demo-analyzer-1',
+              period: 'interval',
+              interval: 3600,
+            },
+          };
+        } else {
+          // Year filter
+          return {
+            success: true,
+            comparison: {
+              previousValue: previousYearTotal,
+              currentValue: currentYearTotal,
+              previousTimestamp: new Date(previousYear, 0, 1),
+              currentTimestamp: new Date(currentYear, 0, 1),
+              percentageChange: yearlyPercentageChange,
+              timeFilter: 'year',
+            },
+            monthlyData: {
+              currentYear: currentYearMonthly,
+              previousYear: previousYearMonthly,
+              currentYearLabel: currentYear,
+              previousYearLabel: previousYear,
+            },
+            trendLog: {
+              _id: 'demo-trendlog-1',
+              registerId: 'demo-register-1',
+              analyzerId: 'demo-analyzer-1',
+              period: 'interval',
+              interval: 3600,
+            },
+          };
+        }
+      }
+
       await this.initialize();
       
       if (this.useCloudBridge) {
@@ -871,6 +1193,34 @@ class ApiService {
 
   async getBillings(): Promise<any[]> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo billing with trend logs');
+        
+        const startTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+        const createdAt = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+        
+        return [{
+          _id: 'demo-billing-1',
+          name: 'Demo Energy Billing',
+          price: 0.15, // $0.15 per kWh
+          currency: 'USD',
+          trendLogs: [
+            {
+              id: 'demo-trendlog-1',
+              analyzerId: 'demo-analyzer-1',
+              registerId: 'demo-register-1',
+              analyzerName: 'Demo Energy Meter',
+              firstValue: 1250.5, // kWh - starting value
+              currentValue: 1580.8, // kWh - current value (330.3 kWh used)
+            },
+          ],
+          startTime: startTime.toISOString(),
+          createdAt: createdAt.toISOString(),
+          updatedAt: new Date().toISOString(),
+        }];
+      }
+
       await this.initialize();
       
       let data;
@@ -914,6 +1264,23 @@ class ApiService {
     limit?: number;
   }): Promise<any> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo system log');
+        return {
+          logs: [{
+            level: 'INFO',
+            source: 'Demo System',
+            message: 'Demo log entry - System is running in demo mode',
+            timestamp: new Date().toISOString(),
+            data: {},
+          }],
+          total: 1,
+          filtered: 1,
+          returned: 1,
+        };
+      }
+
       await this.initialize();
       
       // Query parametrelerini oluştur
@@ -973,6 +1340,74 @@ class ApiService {
 
   async getPeriodicReports(): Promise<any[]> {
     try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo periodic reports');
+        
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const createdAt = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        
+        return [
+          {
+            _id: 'demo-report-1',
+            description: 'Daily Energy Consumption Report',
+            frequency: 'daily',
+            schedule: {
+              hour: 9,
+              minute: 0,
+            },
+            format: 'pdf',
+            last24HoursOnly: true,
+            trendLogs: [
+              { id: 'demo-trendlog-1', label: 'Demo Energy Meter' },
+            ],
+            active: true,
+            createdAt: createdAt.toISOString(),
+            updatedAt: now.toISOString(),
+            lastSent: yesterday.toISOString(),
+          },
+          {
+            _id: 'demo-report-2',
+            description: 'Weekly System Summary Report',
+            frequency: 'weekly',
+            schedule: {
+              dayOfWeek: 1, // Monday
+              hour: 10,
+              minute: 0,
+            },
+            format: 'pdf',
+            last24HoursOnly: false,
+            trendLogs: [
+              { id: 'demo-trendlog-1', label: 'Demo Energy Meter' },
+            ],
+            active: true,
+            createdAt: createdAt.toISOString(),
+            updatedAt: now.toISOString(),
+            lastSent: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+          {
+            _id: 'demo-report-3',
+            description: 'Monthly Billing Report',
+            frequency: 'monthly',
+            schedule: {
+              dayOfMonth: 1,
+              hour: 8,
+              minute: 30,
+            },
+            format: 'pdf',
+            last24HoursOnly: false,
+            trendLogs: [
+              { id: 'demo-trendlog-1', label: 'Demo Energy Meter' },
+            ],
+            active: false,
+            createdAt: createdAt.toISOString(),
+            updatedAt: now.toISOString(),
+            lastSent: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+        ];
+      }
+
       await this.initialize();
       let data;
       if (this.useCloudBridge) {
