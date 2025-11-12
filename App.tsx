@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
@@ -675,15 +675,69 @@ function MainApp() {
   }
 
   const menuItems = [
-    { name: 'Home', icon: 'home', title: 'Home' },
-    { name: 'Registers', icon: 'format-list-bulleted', title: 'Registers' },
-    { name: 'Consumption', icon: 'chart-bar', title: 'Consumption' },
-    { name: 'Billing', icon: 'receipt', title: 'Billing' },
-    { name: 'Logs', icon: 'chart-line', title: 'Logs' },
-    { name: 'SystemLogs', icon: 'file-document', title: 'System Logs' },
-    { name: 'PeriodicReports', icon: 'file-document-outline', title: 'Periodic Reports' },
-    { name: 'Settings', icon: 'cog', title: 'Settings' },
-    { name: 'PrivacyPolicy', icon: 'shield-check', title: 'Privacy Policy' },
+    { 
+      name: 'Home', 
+      icon: 'home', 
+      title: 'Home',
+      iconColor: '#2196F3', // Bright Blue
+      iconLibrary: 'material' as const
+    },
+    { 
+      name: 'Registers', 
+      icon: 'format-list-bulleted', 
+      title: 'Registers',
+      iconColor: '#4CAF50', // Green
+      iconLibrary: 'material' as const
+    },
+    { 
+      name: 'Consumption', 
+      icon: 'chart-bar', 
+      title: 'Consumption',
+      iconColor: '#FF9800', // Orange
+      iconLibrary: 'material' as const
+    },
+    { 
+      name: 'Billing', 
+      icon: 'receipt', 
+      title: 'Billing',
+      iconColor: '#9C27B0', // Purple
+      iconLibrary: 'material' as const
+    },
+    { 
+      name: 'Logs', 
+      icon: 'chart-line', 
+      title: 'Logs',
+      iconColor: '#00BCD4', // Cyan
+      iconLibrary: 'material' as const
+    },
+    { 
+      name: 'SystemLogs', 
+      icon: 'file-document', 
+      title: 'System Logs',
+      iconColor: '#F44336', // Red
+      iconLibrary: 'material' as const
+    },
+    { 
+      name: 'PeriodicReports', 
+      icon: 'file-document-outline', 
+      title: 'Periodic Reports',
+      iconColor: '#3F51B5', // Indigo
+      iconLibrary: 'material' as const
+    },
+    { 
+      name: 'Settings', 
+      icon: 'cog', 
+      title: 'Settings',
+      iconColor: '#607D8B', // Blue Grey
+      iconLibrary: 'material' as const
+    },
+    { 
+      name: 'PrivacyPolicy', 
+      icon: 'shield-check', 
+      title: 'Privacy Policy',
+      iconColor: '#009688', // Teal
+      iconLibrary: 'material' as const
+    },
   ];
 
   const handleMenuSelect = (screenName: string) => {
@@ -923,35 +977,57 @@ function MainApp() {
                 }
                 
                 const isActive = currentScreen === item.name;
+                const iconColor = isActive ? '#FFFFFF' : (item.iconColor || theme.colors.onSurfaceVariant);
                 
                 return (
-                  <List.Item
+                  <TouchableOpacity
                     key={item.name}
-                    title={item.title}
-                    style={[
-                      styles.menuItem,
-                      isActive && {
-                        backgroundColor: theme.colors.primaryContainer,
-                        borderRadius: 28,
-                        marginHorizontal: 12,
-                      }
-                    ]}
-                    titleStyle={[
-                      styles.menuItemText,
-                      isActive && {
-                        color: theme.colors.onPrimaryContainer,
-                        fontWeight: 'bold'
-                      }
-                    ]}
-                    left={props => (
-                      <List.Icon
-                        {...props}
-                        icon={item.icon}
-                        color={isActive ? theme.colors.onPrimaryContainer : theme.colors.onSurfaceVariant}
-                      />
-                    )}
                     onPress={() => handleMenuSelect(item.name)}
-                  />
+                    activeOpacity={0.7}
+                    style={[
+                      styles.menuItemContainer,
+                      isActive && {
+                        backgroundColor: item.iconColor || theme.colors.primary,
+                        borderRadius: 16,
+                        marginHorizontal: 12,
+                        marginVertical: 4,
+                      }
+                    ]}
+                  >
+                    <View style={[
+                      styles.menuItemContent,
+                      isActive && styles.menuItemContentActive
+                    ]}>
+                      <View style={[
+                        styles.iconContainer,
+                        isActive && { backgroundColor: 'rgba(255, 255, 255, 0.2)' },
+                        !isActive && { backgroundColor: `${item.iconColor}15` }
+                      ]}>
+                        {item.iconLibrary === 'material' ? (
+                          <MaterialCommunityIcons
+                            name={item.icon as any}
+                            size={24}
+                            color={iconColor}
+                          />
+                        ) : (
+                          <Ionicons
+                            name={item.icon as any}
+                            size={24}
+                            color={iconColor}
+                          />
+                        )}
+                      </View>
+                      <Text
+                        style={[
+                          styles.menuItemText,
+                          isActive && styles.menuItemTextActive,
+                          !isActive && { color: theme.colors.onSurface }
+                        ]}
+                      >
+                        {item.title}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 );
               })}
               
@@ -959,19 +1035,24 @@ function MainApp() {
               {isDemoMode && (
                 <>
                   <Divider style={{marginVertical: 8}} />
-                  <List.Item
-                    title="Switch Mode"
-                    style={styles.menuItem}
-                    titleStyle={styles.menuItemText}
-                    left={props => (
-                      <List.Icon
-                        {...props}
-                        icon="swap-horizontal"
-                        color={theme.colors.primary}
-                      />
-                    )}
+                  <TouchableOpacity
                     onPress={handleSwitchMode}
-                  />
+                    activeOpacity={0.7}
+                    style={styles.menuItemContainer}
+                  >
+                    <View style={styles.menuItemContent}>
+                      <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.primary}15` }]}>
+                        <MaterialCommunityIcons
+                          name="swap-horizontal"
+                          size={24}
+                          color={theme.colors.primary}
+                        />
+                      </View>
+                      <Text style={[styles.menuItemText, { color: theme.colors.primary }]}>
+                        Switch Mode
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 </>
               )}
               
@@ -979,19 +1060,24 @@ function MainApp() {
               {isAuthenticated && !isDemoMode && (
                 <>
                   <Divider style={{marginVertical: 8}} />
-                  <List.Item
-                    title="Sign Out"
-                    style={styles.menuItem}
-                    titleStyle={styles.menuItemText}
-                    left={props => (
-                      <List.Icon
-                        {...props}
-                        icon="logout"
-                        color={theme.colors.error}
-                      />
-                    )}
+                  <TouchableOpacity
                     onPress={handleSignOut}
-                  />
+                    activeOpacity={0.7}
+                    style={styles.menuItemContainer}
+                  >
+                    <View style={styles.menuItemContent}>
+                      <View style={[styles.iconContainer, { backgroundColor: '#F4433615' }]}>
+                        <MaterialCommunityIcons
+                          name="logout"
+                          size={24}
+                          color="#F44336"
+                        />
+                      </View>
+                      <Text style={[styles.menuItemText, { color: '#F44336' }]}>
+                        Sign Out
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 </>
               )}
             </View>
@@ -1295,12 +1381,40 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 8,
   },
+  menuItemContainer: {
+    marginVertical: 2,
+    marginHorizontal: 8,
+    borderRadius: 16,
+  },
+  menuItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  menuItemContentActive: {
+    paddingVertical: 14,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
   menuItem: {
     paddingVertical: 4,
     marginVertical: 4,
   },
   menuItemText: {
     fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  menuItemTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   menuFooter: {
     padding: 16,
