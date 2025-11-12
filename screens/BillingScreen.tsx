@@ -64,6 +64,8 @@ export default function BillingScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const expandAnims = useRef(new Map<string, Animated.Value>()).current;
+  const breathingAnim = useRef(new Animated.Value(1)).current;
+  const breathingAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     // Entry animation
@@ -149,6 +151,49 @@ export default function BillingScreen() {
       });
     };
   }, [wsConnected, expandedBilling, billings, watchRegister, unwatchRegister]);
+
+  // Nefes alma animasyonu - billing seçildiğinde başlat
+  useEffect(() => {
+    if (draggedBillingIndex !== undefined) {
+      // Önceki animasyonu durdur
+      if (breathingAnimationRef.current) {
+        breathingAnimationRef.current.stop();
+      }
+      
+      // Animasyonu başlat
+      const breathingAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(breathingAnim, {
+            toValue: 1.05,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(breathingAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      breathingAnimationRef.current = breathingAnimation;
+      breathingAnimation.start();
+
+      return () => {
+        if (breathingAnimationRef.current) {
+          breathingAnimationRef.current.stop();
+          breathingAnimationRef.current = null;
+        }
+        breathingAnim.setValue(1);
+      };
+    } else {
+      // Animasyonu durdur ve değeri sıfırla
+      if (breathingAnimationRef.current) {
+        breathingAnimationRef.current.stop();
+        breathingAnimationRef.current = null;
+      }
+      breathingAnim.setValue(1);
+    }
+  }, [draggedBillingIndex]);
 
   const loadBillings = async () => {
     try {
@@ -281,6 +326,12 @@ export default function BillingScreen() {
   const handleBillingPress = (index: number) => {
     // Eğer bu billing zaten seçiliyse, seçimi kaldır
     if (draggedBillingIndex === index) {
+      // Animasyonu durdur ve scale'i sıfırla
+      if (breathingAnimationRef.current) {
+        breathingAnimationRef.current.stop();
+        breathingAnimationRef.current = null;
+      }
+      breathingAnim.setValue(1);
       setDraggedBillingIndex(undefined);
     }
   };
@@ -288,6 +339,12 @@ export default function BillingScreen() {
   // Billing bırakıldığında çağrılır
   const handleBillingDrop = async (targetIndex: number) => {
     if (draggedBillingIndex === undefined || draggedBillingIndex === targetIndex) {
+      // Animasyonu durdur ve scale'i sıfırla
+      if (breathingAnimationRef.current) {
+        breathingAnimationRef.current.stop();
+        breathingAnimationRef.current = null;
+      }
+      breathingAnim.setValue(1);
       setDraggedBillingIndex(undefined);
       return;
     }
@@ -310,6 +367,13 @@ export default function BillingScreen() {
     } catch (error) {
       console.error('Billing sıralaması kaydedilirken hata:', error);
     }
+    
+    // Animasyonu durdur ve scale'i sıfırla
+    if (breathingAnimationRef.current) {
+      breathingAnimationRef.current.stop();
+      breathingAnimationRef.current = null;
+    }
+    breathingAnim.setValue(1);
     
     // Sürüklemeyi sonlandırma
     setDraggedBillingIndex(undefined);
@@ -358,6 +422,11 @@ export default function BillingScreen() {
       outputRange: [0, billing.trendLogs.length * 200 + 300],
     });
 
+    // Seçili billing için animasyonlu scale
+    const animatedStyle = isBeingDragged
+      ? { transform: [{ scale: breathingAnim }] }
+      : {};
+
     return (
       <TouchableOpacity
         onLongPress={() => handleBillingLongPress(index)}
@@ -378,10 +447,11 @@ export default function BillingScreen() {
         activeOpacity={0.9}
         delayLongPress={300}
       >
-      <View style={[
+      <Animated.View style={[
         styles.billingCardWrapper,
         isBeingDragged && styles.beingDragged,
-        canDrop && styles.dropTarget
+        canDrop && styles.dropTarget,
+        animatedStyle
       ]}>
         <GradientCard
           colors={gradientColors}
@@ -553,7 +623,7 @@ export default function BillingScreen() {
             </Animated.View>
           </BlurView>
         </GradientCard>
-      </View>
+      </Animated.View>
       </TouchableOpacity>
     );
   };

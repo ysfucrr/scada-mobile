@@ -1,11 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Alert,
   Animated,
-  Easing,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -18,7 +17,7 @@ import {
   ScrollView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ActivityIndicator, Card, IconButton, useTheme as usePaperTheme } from 'react-native-paper';
+import { ActivityIndicator, Card, useTheme as usePaperTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientCard from '../components/GradientCard';
 import WriteRegisterModal from '../components/WriteRegisterModal';
@@ -67,7 +66,6 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
-  
 
   useEffect(() => {
     if (isConnected) {
@@ -347,15 +345,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       );
     }
   }, []);
-
-  // Analizör seçimini kaldır (tek tıklama ile)
-  const handleAnalyzerPress = useCallback((index: number) => {
-    // Eğer bu analizör zaten seçiliyse, seçimi kaldır
-    if (draggedAnalyzerIndex === index) {
-      setDraggedAnalyzerIndex(undefined);
-    }
-  }, [draggedAnalyzerIndex]);
-
+  
   // Analizör bırakıldığında çağrılır
   const handleAnalyzerDrop = useCallback(async (targetIndex: number) => {
     if (draggedAnalyzerIndex === undefined || draggedAnalyzerIndex === targetIndex) {
@@ -363,40 +353,10 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       return;
     }
 
-    // Mevcut görüntülenen sıralamayı al (sortedAnalyzers mantığı ile tamamen aynı)
-    const currentSortedAnalyzers: string[] = [];
-    
-    // Önce kaydedilmiş sıralamaya göre ekle
-    analyzerOrder
-      .filter(id => groupedRegisters.has(id))
-      .forEach(id => currentSortedAnalyzers.push(id));
-    
-    // Sıralama listesinde olmayan analizörleri ekle
-    Array.from(groupedRegisters.keys()).forEach(id => {
-      if (!currentSortedAnalyzers.includes(id)) {
-        currentSortedAnalyzers.push(id);
-      }
-    });
-
-    // Index'lerin geçerli olduğundan emin ol
-    if (draggedAnalyzerIndex >= currentSortedAnalyzers.length || targetIndex >= currentSortedAnalyzers.length) {
-      console.error('Invalid index in handleAnalyzerDrop', { draggedAnalyzerIndex, targetIndex, length: currentSortedAnalyzers.length });
-      setDraggedAnalyzerIndex(undefined);
-      return;
-    }
-
     // Sürüklenen analizörün yeni konumunu hesaplama
-    const newOrder = [...currentSortedAnalyzers];
+    const newOrder = [...analyzerOrder];
     const [draggedItem] = newOrder.splice(draggedAnalyzerIndex, 1);
     newOrder.splice(targetIndex, 0, draggedItem);
-    
-    console.log('Analyzer drop:', { 
-      draggedIndex: draggedAnalyzerIndex, 
-      targetIndex, 
-      draggedItem, 
-      oldOrder: currentSortedAnalyzers, 
-      newOrder 
-    });
     
     // Yeni sıralamayı güncelle
     setAnalyzerOrder(newOrder);
@@ -410,7 +370,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     
     // Sürüklemeyi sonlandır
     setDraggedAnalyzerIndex(undefined);
-  }, [draggedAnalyzerIndex, analyzerOrder, groupedRegisters]);
+  }, [draggedAnalyzerIndex, analyzerOrder]);
 
   // Register sürükleme başladığında çağrılır
   const handleRegisterLongPress = useCallback((index: number) => {
@@ -427,14 +387,6 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       );
     }
   }, []);
-
-  // Register seçimini kaldır (tek tıklama ile)
-  const handleRegisterPress = useCallback((index: number) => {
-    // Eğer bu register zaten seçiliyse, seçimi kaldır
-    if (draggedRegisterIndex === index) {
-      setDraggedRegisterIndex(undefined);
-    }
-  }, [draggedRegisterIndex]);
   
   // Register bırakıldığında çağrılır
   const handleRegisterDrop = useCallback(async (targetIndex: number) => {
@@ -556,383 +508,95 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     };
   };
 
-  // Animated Analyzer Item Component
-  const AnimatedAnalyzerItem = React.memo(({ 
-    item, 
-    index, 
-    isBeingDragged, 
-    isSelected, 
-    canDrop,
-    onLongPress,
-    onPress,
-    onDrop,
-    gradientColors,
-    isDarkMode,
-    stats,
-    firstRegister
-  }: {
-    item: [string, RegisterData[]];
-    index: number;
-    isBeingDragged: boolean;
-    isSelected: boolean;
-    canDrop: boolean;
-    onLongPress: () => void;
-    onPress: () => void;
-    onDrop: () => void;
-    gradientColors: readonly [string, string];
-    isDarkMode: boolean;
-    stats: { total: number; live: number };
-    firstRegister: RegisterData;
-  }) => {
-    const [analyzerId] = item;
-    
-    // Animations - WidgetCard ile aynı mantık
-    const cardScale = useRef(new Animated.Value(1)).current;
-    const pulseAnim = useRef(new Animated.Value(1)).current;
-    const borderGlowAnim = useRef(new Animated.Value(0)).current;
-    const pulseAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-    const glowAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-    
-    // Sürükleme animasyonları - WidgetCard ile aynı
-    useEffect(() => {
-      if (isBeingDragged) {
-        // Önceki animasyonları durdur
-        if (pulseAnimationRef.current) {
-          pulseAnimationRef.current.stop();
-          pulseAnimationRef.current = null;
-        }
-        if (glowAnimationRef.current) {
-          glowAnimationRef.current.stop();
-          glowAnimationRef.current = null;
-        }
-        
-        // Sürükleme başladığında küçültme efekti
-        Animated.spring(cardScale, {
-          toValue: 0.96,
-          tension: 100,
-          friction: 8,
-          useNativeDriver: true,
-        }).start();
-        
-        // Nefes alıp verme gibi yumuşak pulse animasyonu
-        pulseAnimationRef.current = Animated.loop(
-          Animated.sequence([
-            Animated.timing(pulseAnim, {
-              toValue: 0.94,
-              duration: 1200,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: true,
-            }),
-            Animated.timing(pulseAnim, {
-              toValue: 0.98,
-              duration: 1200,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: true,
-            }),
-          ])
-        );
-        pulseAnimationRef.current.start();
-        
-        // Border glow animasyonu - nefes alıp verme gibi yumuşak
-        glowAnimationRef.current = Animated.loop(
-          Animated.sequence([
-            Animated.timing(borderGlowAnim, {
-              toValue: 1,
-              duration: 1500,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: false,
-            }),
-            Animated.timing(borderGlowAnim, {
-              toValue: 0,
-              duration: 1500,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: false,
-            }),
-          ])
-        );
-        glowAnimationRef.current.start();
-        
-        return () => {
-          if (pulseAnimationRef.current) {
-            pulseAnimationRef.current.stop();
-            pulseAnimationRef.current = null;
-          }
-          if (glowAnimationRef.current) {
-            glowAnimationRef.current.stop();
-            glowAnimationRef.current = null;
-          }
-        };
-      } else {
-        // Sürükleme bittiğinde tüm animasyonları durdur ve normal boyuta dön
-        if (pulseAnimationRef.current) {
-          pulseAnimationRef.current.stop();
-          pulseAnimationRef.current = null;
-        }
-        if (glowAnimationRef.current) {
-          glowAnimationRef.current.stop();
-          glowAnimationRef.current = null;
-        }
-        
-        // Tüm animasyon değerlerini reset et
-        Animated.parallel([
-          Animated.spring(cardScale, {
-            toValue: 1,
-            tension: 150,
-            friction: 7,
-            useNativeDriver: true,
-          }),
-          Animated.spring(pulseAnim, {
-            toValue: 1,
-            tension: 150,
-            friction: 7,
-            useNativeDriver: true,
-          }),
-          Animated.timing(borderGlowAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: false,
-          }),
-        ]).start(() => {
-          cardScale.setValue(1);
-          pulseAnim.setValue(1);
-          borderGlowAnim.setValue(0);
-        });
-      }
-    }, [isBeingDragged]);
+  const renderAnalyzerItem = ({ item, index }: { item: [string, RegisterData[]], index: number }) => {
+    const [analyzerId, analyzerRegisters] = item;
+    const firstRegister = analyzerRegisters[0];
+    const stats = getAnalyzerStats(analyzerId);
+    const isBeingDragged = draggedAnalyzerIndex === index;
+    const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
     
     return (
       <TouchableOpacity
-        onLongPress={onLongPress}
-        onPress={onPress}
+        onLongPress={() => handleAnalyzerLongPress(index)}
+        onPress={draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index
+          ? () => handleAnalyzerDrop(index)
+          : () => handleAnalyzerSelect(analyzerId)
+        }
         activeOpacity={0.9}
         delayLongPress={300}
       >
-        <Animated.View
-          style={[
-            styles.cardWrapper,
-            {
-              transform: [
-                { scale: Animated.multiply(cardScale, pulseAnim) },
-              ],
-            },
-            isBeingDragged && styles.beingDragged,
-            canDrop && styles.dropTarget,
-          ]}
-        >
+        <View style={styles.cardWrapper}>
           <GradientCard
             colors={gradientColors}
-            style={styles.analyzerCard}
+            style={{
+              ...styles.analyzerCard,
+              ...(isBeingDragged ? styles.beingDragged : {}),
+              ...(draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index ? styles.dropTarget : {})
+            }}
             mode="elevated"
           >
-            <BlurView
-              intensity={isDarkMode ? 20 : 15}
-              tint={isDarkMode ? "dark" : "light"}
-              style={styles.blurContainer}
-            >
-              <View style={styles.analyzerContent}>
-                {/* Header */}
-                <View style={styles.analyzerHeader}>
-                  <View style={styles.iconWrapper}>
-                    <MaterialCommunityIcons
-                      name="chip"
-                      size={24}
-                      color="white"
-                    />
-                  </View>
-                  <View style={styles.analyzerInfo}>
-                    <Text style={styles.analyzerName}>
-                      {firstRegister.analyzerName || `analizör ${analyzerId}`}
-                    </Text>
-                    <Text style={styles.buildingName}>
-                      {firstRegister.buildingName || 'Unknown Building'}
-                    </Text>
-                  </View>
-                  {stats.live > 0 && (
-                    <View style={styles.liveBadge}>
-                      <View style={styles.pulseIndicator} />
-                      <Text style={styles.liveText}>LIVE</Text>
-                    </View>
-                  )}
-                </View>
-                
-                {/* Stats */}
-                <View style={styles.statsContainer}>
-                  <View style={styles.statCard}>
-                    <Text style={styles.statValue}>
-                      {stats.total}
-                    </Text>
-                    <Text style={styles.statLabel}>
-                      Total Registers
-                    </Text>
-                  </View>
-                </View>
-                
-                {/* Footer */}
-                <View style={styles.analyzerFooter}>
-                  <Text style={styles.tapHint}>Tap to view registers</Text>
+          <BlurView
+            intensity={isDarkMode ? 20 : 15}
+            tint={isDarkMode ? "dark" : "light"}
+            style={styles.blurContainer}
+          >
+            <View style={styles.analyzerContent}>
+              {/* Header */}
+              <View style={styles.analyzerHeader}>
+                <View style={styles.iconWrapper}>
                   <MaterialCommunityIcons
-                    name="chevron-right"
-                    size={18}
-                    color="rgba(255,255,255,0.8)"
+                    name="chip"
+                    size={24}
+                    color="white"
                   />
                 </View>
+                <View style={styles.analyzerInfo}>
+                  <Text style={styles.analyzerName}>
+                    {firstRegister.analyzerName || `analizör ${analyzerId}`}
+                  </Text>
+                  <Text style={styles.buildingName}>
+                    {firstRegister.buildingName || 'Unknown Building'}
+                  </Text>
+                </View>
+                {stats.live > 0 && (
+                  <View style={styles.liveBadge}>
+                    <View style={styles.pulseIndicator} />
+                    <Text style={styles.liveText}>LIVE</Text>
+                  </View>
+                )}
               </View>
-            </BlurView>
-          </GradientCard>
-        </Animated.View>
-      </TouchableOpacity>
+              
+              {/* Stats */}
+              <View style={styles.statsContainer}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statValue}>
+                    {stats.total}
+                  </Text>
+                  <Text style={styles.statLabel}>
+                    Total Registers
+                  </Text>
+                </View>
+              </View>
+              
+              {/* Footer */}
+              <View style={styles.analyzerFooter}>
+                <Text style={styles.tapHint}>Tap to view registers</Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={18}
+                  color="rgba(255,255,255,0.8)"
+                />
+              </View>
+            </View>
+          </BlurView>
+        </GradientCard>
+      </View>
+    </TouchableOpacity>
     );
-  });
+  };
 
-  // Animated Register Item Component
-  const AnimatedRegisterItem = React.memo(({
-    item,
-    index,
-    isBeingDragged,
-    isSelected,
-    canDrop,
-    onLongPress,
-    onPress,
-    onDrop,
-    realTimeValue,
-    registerState,
-    updateRegisterState,
-    handleWriteRegister,
-    paperTheme,
-  }: {
-    item: RegisterData;
-    index: number;
-    isBeingDragged: boolean;
-    isSelected: boolean;
-    canDrop: boolean;
-    onLongPress: () => void;
-    onPress: () => void;
-    onDrop: () => void;
-    realTimeValue: any;
-    registerState: any;
-    updateRegisterState: (id: string, updates: any) => void;
-    handleWriteRegister: (register: RegisterData) => void;
-    paperTheme: any;
-  }) => {
-    // Animations - WidgetCard ile TAM AYNI mantık
-    const cardScale = useRef(new Animated.Value(1)).current;
-    const pulseAnim = useRef(new Animated.Value(1)).current;
-    const borderGlowAnim = useRef(new Animated.Value(0)).current;
-    const pulseAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-    const glowAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-    
-    // Sürükleme animasyonları - WidgetCard ile TAM AYNI
-    useEffect(() => {
-      if (isBeingDragged) {
-        // Önceki animasyonları durdur
-        if (pulseAnimationRef.current) {
-          pulseAnimationRef.current.stop();
-          pulseAnimationRef.current = null;
-        }
-        if (glowAnimationRef.current) {
-          glowAnimationRef.current.stop();
-          glowAnimationRef.current = null;
-        }
-        
-        // Register item için önemli: Animasyon değerlerini başlangıç durumuna getir
-        // Bu, animasyonun her zaman aynı noktadan başlamasını sağlar
-        pulseAnim.setValue(1);
-        borderGlowAnim.setValue(0);
-        
-        // Sürükleme başladığında küçültme efekti
-        Animated.spring(cardScale, {
-          toValue: 0.96,
-          tension: 100,
-          friction: 8,
-          useNativeDriver: true,
-        }).start();
-        
-        // Nefes alıp verme gibi yumuşak pulse animasyonu
-        pulseAnimationRef.current = Animated.loop(
-          Animated.sequence([
-            Animated.timing(pulseAnim, {
-              toValue: 0.94,
-              duration: 1200,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: true,
-            }),
-            Animated.timing(pulseAnim, {
-              toValue: 0.98,
-              duration: 1200,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: true,
-            }),
-          ])
-        );
-        pulseAnimationRef.current.start();
-        
-        // Border glow animasyonu - nefes alıp verme gibi yumuşak
-        glowAnimationRef.current = Animated.loop(
-          Animated.sequence([
-            Animated.timing(borderGlowAnim, {
-              toValue: 1,
-              duration: 1500,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: false,
-            }),
-            Animated.timing(borderGlowAnim, {
-              toValue: 0,
-              duration: 1500,
-              easing: Easing.inOut(Easing.ease),
-              useNativeDriver: false,
-            }),
-          ])
-        );
-        glowAnimationRef.current.start();
-        
-        return () => {
-          if (pulseAnimationRef.current) {
-            pulseAnimationRef.current.stop();
-            pulseAnimationRef.current = null;
-          }
-          if (glowAnimationRef.current) {
-            glowAnimationRef.current.stop();
-            glowAnimationRef.current = null;
-          }
-        };
-      } else {
-        // Sürükleme bittiğinde tüm animasyonları durdur ve normal boyuta dön
-        if (pulseAnimationRef.current) {
-          pulseAnimationRef.current.stop();
-          pulseAnimationRef.current = null;
-        }
-        if (glowAnimationRef.current) {
-          glowAnimationRef.current.stop();
-          glowAnimationRef.current = null;
-        }
-        
-        // Tüm animasyon değerlerini reset et
-        Animated.parallel([
-          Animated.spring(cardScale, {
-            toValue: 1,
-            tension: 150,
-            friction: 7,
-            useNativeDriver: true,
-          }),
-          Animated.spring(pulseAnim, {
-            toValue: 1,
-            tension: 150,
-            friction: 7,
-            useNativeDriver: true,
-          }),
-          Animated.timing(borderGlowAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: false,
-          }),
-        ]).start(() => {
-          cardScale.setValue(1);
-          pulseAnim.setValue(1);
-          borderGlowAnim.setValue(0);
-        });
-      }
-    }, [isBeingDragged]);
-    
+  const renderRegisterItem = ({ item, index }: { item: RegisterData, index: number }) => {
+    const realTimeValue = realTimeValues.get(item._id);
     const isWritable = item.registerType !== 'read';
     const isDropdown = isWritable && item.controlType === 'dropdown' && item.dropdownOptions && item.dropdownOptions.length > 0;
     const isButton = isWritable && item.controlType === 'button';
@@ -954,6 +618,9 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     }
     
     const isRealTime = realTimeValue !== undefined && !isWritable;
+    const isBeingDragged = draggedRegisterIndex === index;
+    const canDrop = draggedRegisterIndex !== undefined && draggedRegisterIndex !== index;
+    const registerState = registerStates.get(item._id) || {};
     
     const getStatusColor = (status: string) => {
       switch (status) {
@@ -972,284 +639,206 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     
     return (
       <TouchableOpacity
-        onLongPress={onLongPress}
-        onPress={onPress}
+        onLongPress={() => handleRegisterLongPress(index)}
+        onPress={canDrop ? () => handleRegisterDrop(index) : undefined}
         activeOpacity={0.9}
         delayLongPress={300}
       >
-        <Animated.View
-          style={[
-            styles.cardWrapper,
-            {
-              transform: [
-                { scale: Animated.multiply(cardScale, pulseAnim) },
-              ],
-            },
-            isBeingDragged && styles.beingDragged,
-            canDrop && styles.dropTarget,
-          ]}
-        >
+        <View style={[styles.cardWrapper, isBeingDragged && styles.beingDragged, canDrop && styles.dropTarget]}>
           <Card
             style={styles.registerCard}
             mode="elevated"
           >
-            <Card.Content>
-              {/* Modern Header */}
-              <View style={styles.registerHeader}>
-                <View style={styles.registerHeaderLeft}>
-                  <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
-                  <Text style={[styles.registerName, {color: paperTheme.colors.onSurface}]}>
-                    {item.name}
+          <Card.Content>
+            {/* Modern Header */}
+            <View style={styles.registerHeader}>
+              <View style={styles.registerHeaderLeft}>
+                <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
+                <Text style={[styles.registerName, {color: paperTheme.colors.onSurface}]}>
+                  {item.name}
+                </Text>
+              </View>
+              
+              <View style={styles.registerBadges}>
+                {/* Type Badge */}
+                <View style={[styles.typeBadge, { backgroundColor: paperTheme.colors.surfaceVariant }]}>
+                  <Text style={[styles.typeText, {color: paperTheme.colors.primary}]}>
+                    {item.dataType?.toUpperCase()}
                   </Text>
                 </View>
                 
-                <View style={styles.registerBadges}>
-                  {/* Type Badge */}
-                  <View style={[styles.typeBadge, { backgroundColor: paperTheme.colors.surfaceVariant }]}>
-                    <Text style={[styles.typeText, {color: paperTheme.colors.primary}]}>
-                      {item.dataType?.toUpperCase()}
-                    </Text>
+                {isRealTime && (
+                  <View style={styles.liveBadgeSmall}>
+                    <View style={styles.pulseIndicatorSmall} />
+                    <Text style={styles.liveTextSmall}>LIVE</Text>
                   </View>
-                  
-                  {isRealTime && (
-                    <View style={styles.liveBadgeSmall}>
-                      <View style={styles.pulseIndicatorSmall} />
-                      <Text style={styles.liveTextSmall}>LIVE</Text>
-                    </View>
-                  )}
-                </View>
+                )}
               </View>
-              
-              {/* Value Display - Modern */}
-              <View style={[styles.registerValueContainer, { 
-                backgroundColor: isRealTime ? 'rgba(244, 67, 54, 0.08)' : paperTheme.colors.surfaceVariant 
-              }]}>
-                <Text
-                  style={[
-                    styles.registerValue,
-                    {
-                      color: isRealTime ? '#F44336' : (displayValue === 'Writable' ? paperTheme.colors.primary : paperTheme.colors.onSurface),
-                      fontSize: typeof displayValue === 'number' && displayValue.toString().length > 8 ? 20 : (displayValue === 'Writable' || displayValue === 'N/A' ? 18 : 28),
-                      fontStyle: (displayValue === 'Writable' || displayValue === 'N/A') ? 'italic' : 'normal'
-                    }
-                  ]}
-                >
-                  {displayValue}
+            </View>
+            
+            {/* Value Display - Modern */}
+            <View style={[styles.registerValueContainer, { 
+              backgroundColor: isRealTime ? 'rgba(244, 67, 54, 0.08)' : paperTheme.colors.surfaceVariant 
+            }]}>
+              <Text
+                style={[
+                  styles.registerValue,
+                  {
+                    color: isRealTime ? '#F44336' : (displayValue === 'Writable' ? paperTheme.colors.primary : paperTheme.colors.onSurface),
+                    fontSize: typeof displayValue === 'number' && displayValue.toString().length > 8 ? 20 : (displayValue === 'Writable' || displayValue === 'N/A' ? 18 : 28),
+                    fontStyle: (displayValue === 'Writable' || displayValue === 'N/A') ? 'italic' : 'normal'
+                  }
+                ]}
+              >
+                {displayValue}
+              </Text>
+              {item.unit && typeof displayValue === 'number' && (
+                <Text style={[styles.unitText, {color: paperTheme.colors.onSurfaceVariant}]}>
+                  {item.unit}
                 </Text>
-                {item.unit && typeof displayValue === 'number' && (
-                  <Text style={[styles.unitText, {color: paperTheme.colors.onSurfaceVariant}]}>
-                    {item.unit}
-                  </Text>
-                )}
-                {showWritableLabel && (
-                  <View style={styles.writableBadge}>
-                    <Text style={styles.writableBadgeText}>Writable</Text>
-                  </View>
-                )}
-              </View>
-              
-              {/* Write Controls - Dropdown, Button, or Numeric Input */}
-              {isWritable && (
-                <View style={styles.writeControlsContainer}>
-                  {isDropdown ? (
-                    <View style={styles.writeControlSection}>
-                      <TouchableOpacity
-                        style={[styles.dropdownButton, { borderColor: paperTheme.colors.outline }]}
-                        onPress={() => updateRegisterState(item._id, { showDropdown: !registerState.showDropdown })}
-                      >
-                        <Text style={[styles.dropdownButtonText, !registerState.selectedOption && styles.placeholderText]}>
-                          {registerState.selectedOption ? registerState.selectedOption.label : 'Select a value...'}
-                        </Text>
-                        <MaterialCommunityIcons
-                          name={registerState.showDropdown ? "chevron-up" : "chevron-down"}
-                          size={20}
-                          color={paperTheme.colors.onSurfaceVariant}
-                        />
-                      </TouchableOpacity>
-                      {registerState.showDropdown && (
-                        <View style={[styles.dropdownList, { borderColor: paperTheme.colors.outline }]}>
-                          <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled={true}>
-                            {item.dropdownOptions?.map((option, optIndex) => (
-                              <TouchableOpacity
-                                key={optIndex}
-                                style={[
-                                  styles.dropdownItem,
-                                  registerState.selectedOption?.value === option.value && styles.dropdownItemSelected
-                                ]}
-                                onPress={() => updateRegisterState(item._id, { 
-                                  selectedOption: option, 
-                                  showDropdown: false 
-                                })}
-                              >
-                                <Text style={[
-                                  styles.dropdownItemText,
-                                  registerState.selectedOption?.value === option.value && styles.dropdownItemTextSelected
-                                ]}>
-                                  {option.label}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                          </ScrollView>
-                        </View>
-                      )}
-                    </View>
-                  ) : isButton ? (
-                    <View style={styles.stateButtonContainer}>
-                      <TouchableOpacity
-                        style={[
-                          styles.stateButton,
-                          registerState.selectedButton === 'on' && styles.stateButtonSelected,
-                          registerState.selectedButton === 'on' && styles.stateButtonOn
-                        ]}
-                        onPress={() => updateRegisterState(item._id, { selectedButton: 'on' })}
-                      >
-                        <Text style={[
-                          styles.stateButtonText,
-                          registerState.selectedButton === 'on' && styles.stateButtonTextSelected
-                        ]}>
-                          ON state
-                        </Text>
-                        <Text style={styles.stateButtonValue}>
-                          {item.onValue !== undefined && item.onValue !== null ? item.onValue : 'N/A'}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.stateButton,
-                          registerState.selectedButton === 'off' && styles.stateButtonSelected,
-                          registerState.selectedButton === 'off' && styles.stateButtonOff
-                        ]}
-                        onPress={() => updateRegisterState(item._id, { selectedButton: 'off' })}
-                      >
-                        <Text style={[
-                          styles.stateButtonText,
-                          registerState.selectedButton === 'off' && styles.stateButtonTextSelected
-                        ]}>
-                          OFF state
-                        </Text>
-                        <Text style={styles.stateButtonValue}>
-                          {item.offValue !== undefined && item.offValue !== null ? item.offValue : 'N/A'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.writeControlSection}>
-                      <TextInput
-                        style={[styles.numericInput, { borderColor: paperTheme.colors.outline }]}
-                        value={registerState.value || ''}
-                        onChangeText={(text) => updateRegisterState(item._id, { value: text })}
-                        placeholder="Enter numeric value"
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  )}
-                  
-                  {/* Write Button */}
-                  <TouchableOpacity
-                    style={[styles.writeActionButton, { backgroundColor: paperTheme.colors.primary }]}
-                    onPress={() => handleWriteRegister(item)}
-                  >
-                    <Text style={styles.writeActionButtonText}>Write</Text>
-                  </TouchableOpacity>
+              )}
+              {showWritableLabel && (
+                <View style={styles.writableBadge}>
+                  <Text style={styles.writableBadgeText}>Writable</Text>
                 </View>
               )}
-              
-              {/* Footer */}
-              <View style={styles.registerFooter}>
-                <View style={styles.footerLeft}>
-                  <MaterialCommunityIcons
-                    name="clock-outline"
-                    size={12}
-                    color={paperTheme.colors.onSurfaceVariant}
-                    style={styles.clockIcon}
-                  />
-                  <Text style={[styles.lastUpdate, {color: paperTheme.colors.onSurfaceVariant}]}>
-                    {item.timestamp ? new Date(item.timestamp).toLocaleTimeString('tr-TR', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    }) : 'Never updated'}
-                  </Text>
-                </View>
-                
-                {!isWritable && (
-                  <MaterialCommunityIcons
-                    name="lock-outline"
-                    size={16}
-                    color={paperTheme.colors.onSurfaceVariant}
-                  />
+            </View>
+            
+            {/* Write Controls - Dropdown, Button, or Numeric Input */}
+            {isWritable && (
+              <View style={styles.writeControlsContainer}>
+                {isDropdown ? (
+                  <View style={styles.writeControlSection}>
+                    <TouchableOpacity
+                      style={[styles.dropdownButton, { borderColor: paperTheme.colors.outline }]}
+                      onPress={() => updateRegisterState(item._id, { showDropdown: !registerState.showDropdown })}
+                    >
+                      <Text style={[styles.dropdownButtonText, !registerState.selectedOption && styles.placeholderText]}>
+                        {registerState.selectedOption ? registerState.selectedOption.label : 'Select a value...'}
+                      </Text>
+                      <MaterialCommunityIcons
+                        name={registerState.showDropdown ? "chevron-up" : "chevron-down"}
+                        size={20}
+                        color={paperTheme.colors.onSurfaceVariant}
+                      />
+                    </TouchableOpacity>
+                    {registerState.showDropdown && (
+                      <View style={[styles.dropdownList, { borderColor: paperTheme.colors.outline }]}>
+                        <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled={true}>
+                          {item.dropdownOptions?.map((option, optIndex) => (
+                            <TouchableOpacity
+                              key={optIndex}
+                              style={[
+                                styles.dropdownItem,
+                                registerState.selectedOption?.value === option.value && styles.dropdownItemSelected
+                              ]}
+                              onPress={() => updateRegisterState(item._id, { 
+                                selectedOption: option, 
+                                showDropdown: false 
+                              })}
+                            >
+                              <Text style={[
+                                styles.dropdownItemText,
+                                registerState.selectedOption?.value === option.value && styles.dropdownItemTextSelected
+                              ]}>
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+                ) : isButton ? (
+                  <View style={styles.stateButtonContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.stateButton,
+                        registerState.selectedButton === 'on' && styles.stateButtonSelected,
+                        registerState.selectedButton === 'on' && styles.stateButtonOn
+                      ]}
+                      onPress={() => updateRegisterState(item._id, { selectedButton: 'on' })}
+                    >
+                      <Text style={[
+                        styles.stateButtonText,
+                        registerState.selectedButton === 'on' && styles.stateButtonTextSelected
+                      ]}>
+                        ON state
+                      </Text>
+                      <Text style={styles.stateButtonValue}>
+                        {item.onValue !== undefined && item.onValue !== null ? item.onValue : 'N/A'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.stateButton,
+                        registerState.selectedButton === 'off' && styles.stateButtonSelected,
+                        registerState.selectedButton === 'off' && styles.stateButtonOff
+                      ]}
+                      onPress={() => updateRegisterState(item._id, { selectedButton: 'off' })}
+                    >
+                      <Text style={[
+                        styles.stateButtonText,
+                        registerState.selectedButton === 'off' && styles.stateButtonTextSelected
+                      ]}>
+                        OFF state
+                      </Text>
+                      <Text style={styles.stateButtonValue}>
+                        {item.offValue !== undefined && item.offValue !== null ? item.offValue : 'N/A'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.writeControlSection}>
+                    <TextInput
+                      style={[styles.numericInput, { borderColor: paperTheme.colors.outline }]}
+                      value={registerState.value || ''}
+                      onChangeText={(text) => updateRegisterState(item._id, { value: text })}
+                      placeholder="Enter numeric value"
+                      keyboardType="numeric"
+                    />
+                  </View>
                 )}
+                
+                {/* Write Button */}
+                <TouchableOpacity
+                  style={[styles.writeActionButton, { backgroundColor: paperTheme.colors.primary }]}
+                  onPress={() => handleWriteRegister(item)}
+                >
+                  <Text style={styles.writeActionButtonText}>Write</Text>
+                </TouchableOpacity>
               </View>
-            </Card.Content>
-          </Card>
-        </Animated.View>
+            )}
+            
+            {/* Footer */}
+            <View style={styles.registerFooter}>
+              <View style={styles.footerLeft}>
+                <MaterialCommunityIcons
+                  name="clock-outline"
+                  size={12}
+                  color={paperTheme.colors.onSurfaceVariant}
+                  style={styles.clockIcon}
+                />
+                <Text style={[styles.lastUpdate, {color: paperTheme.colors.onSurfaceVariant}]}>
+                  {item.timestamp ? new Date(item.timestamp).toLocaleTimeString('tr-TR', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  }) : 'Never updated'}
+                </Text>
+              </View>
+              
+              {!isWritable && (
+                <MaterialCommunityIcons
+                  name="lock-outline"
+                  size={16}
+                  color={paperTheme.colors.onSurfaceVariant}
+                />
+              )}
+            </View>
+          </Card.Content>
+        </Card>
+      </View>
       </TouchableOpacity>
-    );
-  });
-
-  const renderAnalyzerItem = ({ item, index }: { item: [string, RegisterData[]], index: number }) => {
-    const [analyzerId, analyzerRegisters] = item;
-    const firstRegister = analyzerRegisters[0];
-    const stats = getAnalyzerStats(analyzerId);
-    const isBeingDragged = draggedAnalyzerIndex === index;
-    const isSelected = draggedAnalyzerIndex === index;
-    const canDrop = draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index;
-    const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
-    
-    return (
-      <AnimatedAnalyzerItem
-        item={item}
-        index={index}
-        isBeingDragged={isBeingDragged}
-        isSelected={isSelected}
-        canDrop={canDrop}
-        onLongPress={() => handleAnalyzerLongPress(index)}
-        onPress={() => {
-          if (isSelected) {
-            handleAnalyzerPress(index);
-          } else if (canDrop) {
-            handleAnalyzerDrop(index);
-          } else {
-            handleAnalyzerSelect(analyzerId);
-          }
-        }}
-        onDrop={() => handleAnalyzerDrop(index)}
-        gradientColors={gradientColors}
-        isDarkMode={isDarkMode}
-        stats={stats}
-        firstRegister={firstRegister}
-      />
-    );
-  };
-
-  const renderRegisterItem = ({ item, index }: { item: RegisterData, index: number }) => {
-    const realTimeValue = realTimeValues.get(item._id);
-    const isBeingDragged = draggedRegisterIndex === index;
-    const isSelected = draggedRegisterIndex === index;
-    const canDrop = draggedRegisterIndex !== undefined && draggedRegisterIndex !== index;
-    const registerState = registerStates.get(item._id) || {};
-    
-    return (
-      <AnimatedRegisterItem
-        item={item}
-        index={index}
-        isBeingDragged={isBeingDragged}
-        isSelected={isSelected}
-        canDrop={canDrop}
-        onLongPress={() => handleRegisterLongPress(index)}
-        onPress={() => {
-          if (isSelected) {
-            handleRegisterPress(index);
-          } else if (canDrop) {
-            handleRegisterDrop(index);
-          }
-        }}
-        onDrop={() => handleRegisterDrop(index)}
-        realTimeValue={realTimeValue}
-        registerState={registerState}
-        updateRegisterState={updateRegisterState}
-        handleWriteRegister={handleWriteRegister}
-        paperTheme={paperTheme}
-      />
     );
   };
 
@@ -1461,7 +1050,16 @@ const showDragInfo = () => {
 
 const styles = StyleSheet.create({
   beingDragged: {
-    // Transform animasyonu Animated.View'de uygulanıyor, burada sadece shadow/opacity
+    opacity: 0.85,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 15,
+    transform: [{ scale: 1.05 }],
   },
   dropTarget: {
     borderWidth: 2,
@@ -1469,19 +1067,6 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderRadius: 22,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  selectionGlow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 12, // Register card'lar için
-    borderColor: '#2196F3',
-    zIndex: 1,
-  },
-  selectionGlowAnalyzer: {
-    borderRadius: 16, // Analyzer card'lar için (GradientCard borderRadius ile uyumlu)
   },
   container: {
     flex: 1,
@@ -1716,21 +1301,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     marginTop: 4,
-  },
-  writableBadge: {
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginTop: 8,
-    alignSelf: 'flex-start',
-  },
-  writableBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#1976d2',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   typeBadge: {
     flexDirection: 'row',
@@ -2017,5 +1587,20 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  writableBadge: {
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  writableBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1976d2',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 });

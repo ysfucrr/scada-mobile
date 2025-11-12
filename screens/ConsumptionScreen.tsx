@@ -76,6 +76,7 @@ export default function ConsumptionScreen() {
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  const breathingAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     // Entry animation
@@ -110,6 +111,36 @@ export default function ConsumptionScreen() {
       showDragInfo();
     }
   }, [widgets.length, isLoading]);
+
+  // Nefes alma animasyonu - widget seçildiğinde başlat
+  useEffect(() => {
+    if (draggedWidgetIndex !== undefined) {
+      // Animasyonu başlat
+      const breathingAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(breathingAnim, {
+            toValue: 1.05,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(breathingAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      breathingAnimation.start();
+
+      return () => {
+        breathingAnimation.stop();
+        breathingAnim.setValue(1);
+      };
+    } else {
+      // Animasyonu durdur ve değeri sıfırla
+      breathingAnim.setValue(1);
+    }
+  }, [draggedWidgetIndex]);
 
   // Watch registers for live data when time filter is month
   useEffect(() => {
@@ -470,8 +501,13 @@ export default function ConsumptionScreen() {
 
     const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
     
+    // Seçili widget için animasyonlu scale
+    const animatedStyle = draggedWidgetIndex === index
+      ? { transform: [{ scale: breathingAnim }] }
+      : {};
+    
     return (
-      <View style={styles.widgetWrapper}>
+      <Animated.View style={[styles.widgetWrapper, animatedStyle]}>
         <GradientCard
           colors={gradientColors}
           style={{
@@ -745,7 +781,7 @@ export default function ConsumptionScreen() {
             </View>
           </BlurView>
         </GradientCard>
-      </View>
+      </Animated.View>
     );
   };
 
@@ -866,7 +902,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 20,
     elevation: 16,
-    transform: [{ scale: 1.05 }],
   },
   dropTarget: {
     borderWidth: 2,

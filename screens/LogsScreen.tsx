@@ -68,6 +68,8 @@ export default function LogsScreen() {
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const breathingAnim = useRef(new Animated.Value(1)).current;
+  const breathingAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
     if (isConnected) {
@@ -85,6 +87,49 @@ export default function LogsScreen() {
       showDragInfo();
     }
   }, [analyzerOrder.length, viewMode, isLoading]);
+
+  // Nefes alma animasyonu - analizör seçildiğinde başlat
+  useEffect(() => {
+    if (draggedAnalyzerIndex !== undefined && viewMode === 'analyzers') {
+      // Önceki animasyonu durdur
+      if (breathingAnimationRef.current) {
+        breathingAnimationRef.current.stop();
+      }
+      
+      // Animasyonu başlat
+      const breathingAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(breathingAnim, {
+            toValue: 1.05,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(breathingAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      breathingAnimationRef.current = breathingAnimation;
+      breathingAnimation.start();
+
+      return () => {
+        if (breathingAnimationRef.current) {
+          breathingAnimationRef.current.stop();
+          breathingAnimationRef.current = null;
+        }
+        breathingAnim.setValue(1);
+      };
+    } else {
+      // Animasyonu durdur ve değeri sıfırla
+      if (breathingAnimationRef.current) {
+        breathingAnimationRef.current.stop();
+        breathingAnimationRef.current = null;
+      }
+      breathingAnim.setValue(1);
+    }
+  }, [draggedAnalyzerIndex, viewMode]);
 
   const loadTrendLogs = async () => {
     try {
@@ -322,6 +367,12 @@ export default function LogsScreen() {
   const handleAnalyzerPress = useCallback((index: number) => {
     // Eğer bu analizör zaten seçiliyse, seçimi kaldır
     if (draggedAnalyzerIndex === index) {
+      // Animasyonu durdur ve scale'i sıfırla
+      if (breathingAnimationRef.current) {
+        breathingAnimationRef.current.stop();
+        breathingAnimationRef.current = null;
+      }
+      breathingAnim.setValue(1);
       setDraggedAnalyzerIndex(undefined);
     }
   }, [draggedAnalyzerIndex]);
@@ -329,6 +380,12 @@ export default function LogsScreen() {
   // Analizör bırakıldığında çağrılır
   const handleAnalyzerDrop = useCallback(async (targetIndex: number) => {
     if (draggedAnalyzerIndex === undefined || draggedAnalyzerIndex === targetIndex) {
+      // Animasyonu durdur ve scale'i sıfırla
+      if (breathingAnimationRef.current) {
+        breathingAnimationRef.current.stop();
+        breathingAnimationRef.current = null;
+      }
+      breathingAnim.setValue(1);
       setDraggedAnalyzerIndex(undefined);
       return;
     }
@@ -351,6 +408,12 @@ export default function LogsScreen() {
     // Index'lerin geçerli olduğundan emin ol
     if (draggedAnalyzerIndex >= currentSortedAnalyzers.length || targetIndex >= currentSortedAnalyzers.length) {
       console.error('Invalid index in handleAnalyzerDrop', { draggedAnalyzerIndex, targetIndex, length: currentSortedAnalyzers.length });
+      // Animasyonu durdur ve scale'i sıfırla
+      if (breathingAnimationRef.current) {
+        breathingAnimationRef.current.stop();
+        breathingAnimationRef.current = null;
+      }
+      breathingAnim.setValue(1);
       setDraggedAnalyzerIndex(undefined);
       return;
     }
@@ -369,6 +432,13 @@ export default function LogsScreen() {
     } catch (error) {
       console.error('Analizör sıralaması kaydedilirken hata:', error);
     }
+    
+    // Animasyonu durdur ve scale'i sıfırla
+    if (breathingAnimationRef.current) {
+      breathingAnimationRef.current.stop();
+      breathingAnimationRef.current = null;
+    }
+    breathingAnim.setValue(1);
     
     // Sürüklemeyi sonlandır
     setDraggedAnalyzerIndex(undefined);
@@ -542,6 +612,11 @@ export default function LogsScreen() {
     const canDrop = draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index;
     const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
     
+    // Seçili analizör için animasyonlu scale
+    const animatedStyle = isBeingDragged
+      ? { transform: [{ scale: breathingAnim }] }
+      : {};
+    
     return (
       <TouchableOpacity
         onLongPress={() => handleAnalyzerLongPress(index)}
@@ -562,7 +637,7 @@ export default function LogsScreen() {
         activeOpacity={0.9}
         delayLongPress={300}
       >
-        <View style={styles.cardWrapper}>
+        <Animated.View style={[styles.cardWrapper, animatedStyle]}>
           <GradientCard
             colors={gradientColors}
             style={{
@@ -627,7 +702,7 @@ export default function LogsScreen() {
             </View>
           </BlurView>
         </GradientCard>
-      </View>
+      </Animated.View>
     </TouchableOpacity>
     );
   };
@@ -830,7 +905,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 20,
     elevation: 15,
-    transform: [{ scale: 1.05 }],
   },
   dropTarget: {
     borderWidth: 2,
