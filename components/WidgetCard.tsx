@@ -3,6 +3,7 @@ import { BlurView } from 'expo-blur';
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Chip, Text, useTheme } from 'react-native-paper';
+import { useOrientation } from '../context/OrientationContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { AppTheme } from '../theme/theme';
 import GradientCard from './GradientCard';
@@ -44,6 +45,7 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
 }) => {
   const theme = useTheme() as AppTheme;
   const { isDarkMode } = useAppTheme();
+  const { isLandscape, screenWidth, numColumns, isTablet } = useOrientation();
   
   // Set default gradient colors based on dark mode
   const effectiveGradientColors = gradientColors || (isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const);
@@ -120,8 +122,25 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
     ? { transform: [{ scale: breathingAnim }] }
     : {};
 
+  // Calculate card width based on numColumns and device type
+  // numColumns is already optimized by OrientationContext for tablets
+  // For tablets: use optimized padding and gap values
+  // For phones: use standard padding and gap values
+  const horizontalPadding = isTablet ? (isLandscape ? 16 : 20) : 16;
+  const cardGap = isTablet ? (isLandscape ? 16 : 12) : 12;
+  
+  const cardWidth = numColumns > 1
+    ? (screenWidth - (horizontalPadding * 2) - (cardGap * (numColumns - 1))) / numColumns
+    : undefined;
+
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View style={[
+      animatedStyle, 
+      cardWidth ? { 
+        width: cardWidth,
+        marginBottom: 0,
+      } : undefined
+    ]}>
       <TouchableOpacity
         onLongPress={onLongPress}
         onPress={handlePress}
@@ -139,6 +158,7 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
             },
             isBeingDragged && styles.beingDragged,
             draggedIndex !== undefined && myIndex !== draggedIndex && styles.dropTarget,
+            isLandscape && { marginBottom: 0 },
           ]}
         >
       <GradientCard

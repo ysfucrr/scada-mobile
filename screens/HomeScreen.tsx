@@ -20,6 +20,7 @@ import WidgetCard from '../components/WidgetCard';
 
 // Contexts
 import { useConnection } from '../context/ConnectionContext';
+import { useOrientation } from '../context/OrientationContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { useWebSocket } from '../context/WebSocketContext';
 
@@ -80,9 +81,33 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   } = useWebSocket();
   const { theme, isDarkMode } = useAppTheme();
   const paperTheme = useTheme() as AppTheme;
+  const { isLandscape, screenWidth, numColumns: orientationNumColumns, isTablet } = useOrientation();
   
   // Screen dimensions
   const { width, height } = useWindowDimensions();
+  
+  // Calculate number of columns for widgets based on orientation and device type
+  // Use OrientationContext's numColumns directly for tablets (already optimized)
+  // For phones, use optimized values:
+  // Phone Portrait: 1 column (full width)
+  // Phone Landscape: 2 columns
+  // Tablet Portrait (810x1080): 2 columns (from OrientationContext)
+  // Tablet Landscape (1080x810): 3 columns (from OrientationContext)
+  const numColumns = isTablet 
+    ? orientationNumColumns  // Use OrientationContext's optimized value for tablets
+    : (isLandscape ? 2 : 1); // Phone: 2 columns landscape, 1 column portrait
+  
+  // Calculate system card width and columns for system health cards
+  // Tablet Landscape: 2 columns
+  // Tablet Portrait: 1 column (full width for better readability)
+  // Phone: 1 column (full width)
+  const systemNumColumns = isTablet && isLandscape ? 2 : 1;
+  // Calculate padding based on device type and orientation
+  const horizontalPadding = isTablet ? (isLandscape ? 16 : 20) : 16;
+  const cardGap = isTablet ? (isLandscape ? 16 : 12) : 12;
+  const systemCardWidth = systemNumColumns > 1 
+    ? (screenWidth - (horizontalPadding * 2) - (cardGap * (systemNumColumns - 1))) / systemNumColumns 
+    : undefined;
   
   // States
   const [activeTab, setActiveTab] = useState<'overview' | 'system'>('overview');
@@ -413,8 +438,19 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
       );
     }
 
+    // Calculate padding and gap for widgets container based on device type
+    const containerPadding = isTablet ? (isLandscape ? 16 : 20) : 16;
+    const widgetGap = isTablet ? (isLandscape ? 16 : 12) : 12;
+    
     return (
-      <View style={styles.widgetsContainer}>
+      <View style={[
+        styles.widgetsContainer,
+        numColumns > 1 ? styles.widgetsContainerLandscape : undefined,
+        {
+          paddingHorizontal: containerPadding,
+          gap: numColumns > 1 ? widgetGap : undefined,
+        }
+      ]}>
         {widgets.map((widget, index) => (
           <WidgetCard
             key={widget._id}
@@ -471,19 +507,35 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
 
   // Render the System Health tab content
   const renderSystemContent = () => {
+    // Calculate padding and gap for system health container based on device type
+    const systemContainerPadding = isTablet ? (isLandscape ? 16 : 20) : 16;
+    const systemCardGap = isTablet ? (isLandscape ? 16 : 12) : 12;
+    
     return (
-      <View style={styles.systemHealthContainer}>
+      <View style={[
+        styles.systemHealthContainer,
+        isLandscape ? styles.systemHealthContainerLandscape : undefined,
+        {
+          paddingHorizontal: systemContainerPadding,
+          gap: isLandscape && systemNumColumns > 1 ? systemCardGap : undefined,
+        }
+      ]}>
         {/* Connection Status Card */}
-        <StatusCard
-          title="Connection Status"
-          status={isConnected}
-          subtitle={`WebSocket: ${wsConnectionState.charAt(0).toUpperCase() + wsConnectionState.slice(1)}`}
-          lastUpdate={lastUpdate}
-          additionalInfo={`Real-time Values: ${registerValues.size} active`}
-        />
+        <View style={systemCardWidth ? { width: systemCardWidth, marginBottom: 0 } : undefined}>
+          <StatusCard
+            title="Connection Status"
+            status={isConnected}
+            subtitle={`WebSocket: ${wsConnectionState.charAt(0).toUpperCase() + wsConnectionState.slice(1)}`}
+            lastUpdate={lastUpdate}
+            additionalInfo={`Real-time Values: ${registerValues.size} active`}
+          />
+        </View>
         
         {/* Refresh Controls */}
-        <View style={styles.refreshControlsWrapper}>
+        <View style={[
+          styles.refreshControlsWrapper,
+          systemCardWidth ? { width: systemCardWidth, marginBottom: 0 } : undefined
+        ]}>
           <GradientCard
             colors={isDarkMode ? ['#263238', '#37474F'] : ['#E3F2FD', '#BBDEFB']}
             style={styles.refreshControlsCard}
@@ -547,70 +599,78 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
         </View>
 
         {/* System Overview Card */}
-        <DataCard
-          title="System Overview"
-          data={systemInfo?.system
-            ? [
-                { id: 'platform', label: 'Platform', value: systemInfo.system.platform },
-                { id: 'hostname', label: 'Hostname', value: systemInfo.system.hostname },
-                { id: 'cpu', label: 'CPU Cores', value: systemInfo.system.cpuCount },
-                { id: 'uptime', label: 'Uptime', value: formatUptime(systemInfo.system.uptime) },
-              ]
-            : []}
-          icon="server"
-          onRefresh={() => loadSystemInfo()}
-          isLoading={isRefreshing}
-        />
+        <View style={systemCardWidth ? { width: systemCardWidth, marginBottom: 0 } : undefined}>
+          <DataCard
+            title="System Overview"
+            data={systemInfo?.system
+              ? [
+                  { id: 'platform', label: 'Platform', value: systemInfo.system.platform },
+                  { id: 'hostname', label: 'Hostname', value: systemInfo.system.hostname },
+                  { id: 'cpu', label: 'CPU Cores', value: systemInfo.system.cpuCount },
+                  { id: 'uptime', label: 'Uptime', value: formatUptime(systemInfo.system.uptime) },
+                ]
+              : []}
+            icon="server"
+            onRefresh={() => loadSystemInfo()}
+            isLoading={isRefreshing}
+          />
+        </View>
 
         {/* Memory Usage Card */}
-        <DataCard
-          title="Memory Usage"
-          data={systemInfo?.system
-            ? [
-                { id: 'total', label: 'Total Memory', value: systemInfo.system.totalMemory, unit: 'GB' },
-                { id: 'used', label: 'Used Memory', value: systemInfo.system.usedMemory, unit: 'GB' },
-                { id: 'free', label: 'Free Memory', value: systemInfo.system.freeMemory, unit: 'GB' },
-                { id: 'usage', label: 'Usage', value: systemInfo.system.memoryUsagePercent, unit: '%' },
-              ]
-            : []}
-          icon="memory"
-          onRefresh={() => loadSystemInfo()}
-          isLoading={isRefreshing}
-          gradientColors={['#9C27B0', '#BA68C8']}
-        />
+        <View style={systemCardWidth ? { width: systemCardWidth, marginBottom: 0 } : undefined}>
+          <DataCard
+            title="Memory Usage"
+            data={systemInfo?.system
+              ? [
+                  { id: 'total', label: 'Total Memory', value: systemInfo.system.totalMemory, unit: 'GB' },
+                  { id: 'used', label: 'Used Memory', value: systemInfo.system.usedMemory, unit: 'GB' },
+                  { id: 'free', label: 'Free Memory', value: systemInfo.system.freeMemory, unit: 'GB' },
+                  { id: 'usage', label: 'Usage', value: systemInfo.system.memoryUsagePercent, unit: '%' },
+                ]
+              : []}
+            icon="memory"
+            onRefresh={() => loadSystemInfo()}
+            isLoading={isRefreshing}
+            gradientColors={['#9C27B0', '#BA68C8']}
+          />
+        </View>
 
         {/* MongoDB Overview Card */}
-        <DataCard
-          title="MongoDB Overview"
-          data={systemInfo?.mongodb?.dbStats
-            ? [
-                { id: 'db', label: 'Database', value: systemInfo.mongodb.dbStats.db },
-                { id: 'collections', label: 'Collections', value: systemInfo.mongodb.dbStats.collections },
-                { id: 'documents', label: 'Documents', value: systemInfo.mongodb.dbStats.objects.toLocaleString() },
-                { id: 'size', label: 'Data Size', value: formatBytes(systemInfo.mongodb.dbStats.dataSize * 1024 * 1024) },
-              ]
-            : []}
-          icon="database"
-          onRefresh={() => loadSystemInfo()}
-          isLoading={isRefreshing}
-          gradientColors={['#FF6F00', '#FFA726']}
-        />
+        <View style={systemCardWidth ? { width: systemCardWidth, marginBottom: 0 } : undefined}>
+          <DataCard
+            title="MongoDB Overview"
+            data={systemInfo?.mongodb?.dbStats
+              ? [
+                  { id: 'db', label: 'Database', value: systemInfo.mongodb.dbStats.db },
+                  { id: 'collections', label: 'Collections', value: systemInfo.mongodb.dbStats.collections },
+                  { id: 'documents', label: 'Documents', value: systemInfo.mongodb.dbStats.objects.toLocaleString() },
+                  { id: 'size', label: 'Data Size', value: formatBytes(systemInfo.mongodb.dbStats.dataSize * 1024 * 1024) },
+                ]
+              : []}
+            icon="database"
+            onRefresh={() => loadSystemInfo()}
+            isLoading={isRefreshing}
+            gradientColors={['#FF6F00', '#FFA726']}
+          />
+        </View>
 
         {/* Top Collections Card */}
         {systemInfo?.mongodb?.collectionStats && systemInfo.mongodb.collectionStats.length > 0 && (
-          <DataCard
-            title="Top Collections"
-            data={systemInfo.mongodb.collectionStats
-              .sort((a, b) => b.count - a.count)
-              .slice(0, 5)
-              .map(collection => ({
-                id: collection.name,
-                label: collection.name,
-                value: collection.count.toLocaleString()
-              }))}
-            icon="folder-multiple"
-            gradientColors={['#00BCD4', '#4DD0E1']}
-          />
+          <View style={systemCardWidth ? { width: systemCardWidth, marginBottom: 0 } : undefined}>
+            <DataCard
+              title="Top Collections"
+              data={systemInfo.mongodb.collectionStats
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 5)
+                .map(collection => ({
+                  id: collection.name,
+                  label: collection.name,
+                  value: collection.count.toLocaleString()
+                }))}
+              icon="folder-multiple"
+              gradientColors={['#00BCD4', '#4DD0E1']}
+            />
+          </View>
         )}
       </View>
     );
@@ -729,9 +789,13 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   widgetsContainer: {
-    paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 16,
+  },
+  widgetsContainerLandscape: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
   },
   emptyWidgetsContainer: {
     padding: 16,
@@ -757,8 +821,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   systemHealthContainer: {
-    padding: 16,
+    paddingTop: 16,
     paddingBottom: 16,
+  },
+  systemHealthContainerLandscape: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
   },
   refreshControlsWrapper: {
     marginBottom: 16,

@@ -3,7 +3,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, Dimensions, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, AppState, AppStateStatus, Dimensions, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   Appbar,
@@ -30,6 +30,7 @@ import SystemLogsScreen from './screens/SystemLogsScreen';
 
 // Contexts
 import { ConnectionProvider } from './context/ConnectionContext';
+import { OrientationProvider, useOrientation } from './context/OrientationContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { WebSocketProvider } from './context/WebSocketContext';
 
@@ -39,6 +40,7 @@ import AuthService from './services/AuthService';
 
 // Contexts
 import { useConnection } from './context/ConnectionContext';
+import { useWebSocket } from './context/WebSocketContext';
 
 // Main App component
 export default function AppWrapper() {
@@ -47,11 +49,13 @@ export default function AppWrapper() {
       <SafeAreaProvider>
         <ThemeProvider>
           <PaperProviderWithTheme>
-            <ConnectionProvider>
-              <WebSocketProvider>
-                <MainApp />
-              </WebSocketProvider>
-            </ConnectionProvider>
+            <OrientationProvider>
+              <ConnectionProvider>
+                <WebSocketProvider>
+                  <MainApp />
+                </WebSocketProvider>
+              </ConnectionProvider>
+            </OrientationProvider>
           </PaperProviderWithTheme>
         </ThemeProvider>
       </SafeAreaProvider>
@@ -75,6 +79,8 @@ function MainApp() {
   const { theme, isDarkMode, toggleTheme } = useTheme();
   const paperTheme = usePaperTheme();
   const { isConnected, connect } = useConnection();
+  const { isConnected: wsConnected, connectionState: wsConnectionState } = useWebSocket();
+  const { isLandscape, screenWidth } = useOrientation();
   
   const [currentScreen, setCurrentScreen] = useState('Settings');
   const [isMenuVisible, setIsMenuVisible] = useState(false);
@@ -84,6 +90,12 @@ function MainApp() {
   const [showSplash, setShowSplash] = useState(true);
   const [agentName, setAgentName] = useState<string>('SCADA Mobile');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [showSessionExpiredModal, setShowSessionExpiredModal] = useState(false);
+  
+  // AppState tracking for session timeout
+  const appStateRef = useRef(AppState.currentState);
+  const backgroundTimeRef = useRef<number | null>(null);
+  const SESSION_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -339,6 +351,49 @@ function MainApp() {
 
     loadAgentName();
   }, [isAuthenticated, isMenuVisible]);
+
+  // AppState listener for session timeout
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (
+        appStateRef.current.match(/inactive|background/) &&
+        nextAppState === 'active'
+      ) {
+        // App has come to the foreground
+        console.log('[App] App has come to the foreground');
+        
+        // Check if we were in background for more than 3 minutes
+        if (backgroundTimeRef.current !== null) {
+          const timeInBackground = Date.now() - backgroundTimeRef.current;
+          
+          if (timeInBackground >= SESSION_TIMEOUT_MS) {
+            // Check if connection is lost
+            const connectionLost = !wsConnected || wsConnectionState !== 'connected' || !isConnected;
+            
+            if (connectionLost && isAuthenticated && !isDemoMode) {
+              console.log('[App] Session expired - showing modal');
+              setShowSessionExpiredModal(true);
+            }
+          }
+          
+          backgroundTimeRef.current = null;
+        }
+      } else if (
+        appStateRef.current === 'active' &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        // App has gone to the background
+        console.log('[App] App has gone to the background');
+        backgroundTimeRef.current = Date.now();
+      }
+
+      appStateRef.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [wsConnected, wsConnectionState, isConnected, isAuthenticated, isDemoMode]);
 
   const checkInitialSetup = async () => {
     try {
@@ -915,6 +970,7 @@ function MainApp() {
         transparent={true}
         animationType="none"
         onRequestClose={closeMenu}
+        supportedOrientations={['portrait', 'portrait-upside-down', 'landscape', 'landscape-left', 'landscape-right']}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
@@ -935,7 +991,8 @@ function MainApp() {
                 {
                   transform: [{ translateX: menuSlideAnim }],
                   backgroundColor: theme.colors.surface,
-                  borderRightColor: theme.colors.outlineVariant
+                  borderRightColor: theme.colors.outlineVariant,
+                  width: isLandscape ? Math.min(400, screenWidth * 0.4) : 300
                 }
               ]}
             >
@@ -963,7 +1020,11 @@ function MainApp() {
             
             <Divider />
             
-            <View style={styles.menuContent}>
+            <ScrollView 
+              style={styles.menuContent}
+              contentContainerStyle={styles.menuContentContainer}
+              showsVerticalScrollIndicator={true}
+            >
               {/* Menu Items with Material Design 3 styling */}
               {menuItems.map((item) => {
                 // Demo mode'da Settings'i gizle
@@ -1080,7 +1141,7 @@ function MainApp() {
                   </TouchableOpacity>
                 </>
               )}
-            </View>
+            </ScrollView>
             
             <Divider style={{marginVertical: 8}} />
             
@@ -1111,6 +1172,63 @@ function MainApp() {
             </Animated.View>
           </Animated.View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Session Expired Modal */}
+      <Modal
+        visible={showSessionExpiredModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSessionExpiredModal(false)}
+      >
+        <View style={styles.sessionModalOverlay}>
+          <View style={[styles.sessionModalContainer, { backgroundColor: paperTheme.colors.surface }]}>
+            <View style={styles.sessionModalHeader}>
+              <MaterialCommunityIcons
+                name="alert-circle"
+                size={48}
+                color={paperTheme.colors.error}
+              />
+              <Text style={[styles.sessionModalTitle, { color: paperTheme.colors.onSurface }]}>
+                Session Expired
+              </Text>
+            </View>
+            
+            <Text style={[styles.sessionModalText, { color: paperTheme.colors.onSurfaceVariant }]}>
+              Your session has expired. The connection to the server or agent has been lost. Please login again to continue using the application.
+            </Text>
+            
+            <TouchableOpacity
+              style={[styles.sessionModalButton, { backgroundColor: paperTheme.colors.primary }]}
+              onPress={async () => {
+                setShowSessionExpiredModal(false);
+                
+                // Small delay to ensure modal closes smoothly
+                setTimeout(() => {
+                  // Check if server connection exists
+                  if (isConnected) {
+                    // Navigate to Login screen
+                    setCurrentScreen('Login');
+                  } else {
+                    // Navigate to Settings screen to configure connection
+                    setCurrentScreen('Settings');
+                  }
+                }, 300);
+              }}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons
+                name="login"
+                size={20}
+                color="white"
+                style={styles.sessionModalButtonIcon}
+              />
+              <Text style={styles.sessionModalButtonText}>
+                Login
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1379,7 +1497,10 @@ const styles = StyleSheet.create({
   },
   menuContent: {
     flex: 1,
+  },
+  menuContentContainer: {
     paddingTop: 8,
+    paddingBottom: 8,
   },
   menuItemContainer: {
     marginVertical: 2,
@@ -1440,5 +1561,62 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '500',
     marginTop: 10,
+  },
+  // Session Expired Modal Styles
+  sessionModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  sessionModalContainer: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 24,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  sessionModalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  sessionModalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginTop: 12,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  sessionModalText: {
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  sessionModalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  sessionModalButtonIcon: {
+    marginRight: 8,
+  },
+  sessionModalButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });

@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, Card, useTheme as usePaperTheme } from 'react-native-paper';
 import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
+import { useOrientation } from '../context/OrientationContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import ApiService from '../services/ApiService';
@@ -62,6 +63,7 @@ export default function ConsumptionScreen() {
   const { isDarkMode } = useAppTheme();
   const { isConnected } = useConnection();
   const { isConnected: wsConnected, connect: wsConnect, watchRegister, unwatchRegister } = useWebSocket();
+  const { isLandscape, screenWidth, numColumns } = useOrientation();
   
   const [widgets, setWidgets] = useState<ConsumptionWidget[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -845,10 +847,16 @@ export default function ConsumptionScreen() {
         }}
       >
         <FlatList
+          key={`consumption-${isLandscape ? 'landscape' : 'portrait'}`}
           data={widgets}
           renderItem={renderConsumptionWidget}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            isLandscape && styles.contentLandscape
+          ]}
+          numColumns={numColumns}
+          columnWrapperStyle={isLandscape ? styles.columnWrapper : undefined}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -922,6 +930,13 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 32,
   },
+  contentLandscape: {
+    paddingHorizontal: 12,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
   
   // Not Connected Styles
   notConnectedWrapper: {
@@ -954,6 +969,8 @@ const styles = StyleSheet.create({
   // Widget Styles
   widgetWrapper: {
     marginBottom: 16,
+    flex: 1,
+    marginHorizontal: 4,
   },
   widgetCard: {
     elevation: 3,

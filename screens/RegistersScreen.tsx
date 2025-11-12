@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientCard from '../components/GradientCard';
 import WriteRegisterModal from '../components/WriteRegisterModal';
 import { useConnection } from '../context/ConnectionContext';
+import { useOrientation } from '../context/OrientationContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import ApiService, { RegisterData } from '../services/ApiService';
@@ -34,6 +35,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
   const paperTheme = usePaperTheme();
   const { isDarkMode } = useAppTheme();
   const { isConnected } = useConnection();
+  const { isLandscape, screenWidth, numColumns, isTablet } = useOrientation();
   const {
     isConnected: wsConnected,
     connect: wsConnect,
@@ -598,8 +600,21 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       ? { transform: [{ scale: breathingAnimAnalyzer }] }
       : {};
     
+    // Calculate card width based on numColumns with proper spacing
+    // Phone landscape: better padding and gap
+    // Tablet: optimized for larger screens
+    const analyzerHorizontalPadding = isTablet ? (isLandscape ? 16 : 20) : (isLandscape ? 20 : 16);
+    const analyzerCardGap = isTablet ? (isLandscape ? 16 : 12) : (isLandscape ? 16 : 12);
+    
+    const analyzerCardWidth = numColumns > 1
+      ? (screenWidth - (analyzerHorizontalPadding * 2) - (analyzerCardGap * (numColumns - 1))) / numColumns
+      : undefined;
+    
     return (
-      <Animated.View style={animatedStyle}>
+      <Animated.View style={[
+        animatedStyle,
+        analyzerCardWidth ? { width: analyzerCardWidth } : undefined
+      ]}>
         <TouchableOpacity
           onLongPress={() => handleAnalyzerLongPress(index)}
           onPress={() => {
@@ -619,13 +634,17 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
           activeOpacity={0.9}
           delayLongPress={500}
         >
-        <View style={styles.cardWrapper}>
+        <View style={[
+          styles.cardWrapper,
+          numColumns > 1 && { marginBottom: 0 }
+        ]}>
           <GradientCard
             colors={gradientColors}
             style={{
               ...styles.analyzerCard,
               ...(isBeingDragged ? styles.beingDragged : {}),
-              ...(draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index ? styles.dropTarget : {})
+              ...(draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index ? styles.dropTarget : {}),
+              ...(numColumns > 1 && { marginBottom: 0 })
             }}
             mode="elevated"
           >
@@ -661,8 +680,14 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
               </View>
               
               {/* Stats */}
-              <View style={styles.statsContainer}>
-                <View style={styles.statCard}>
+              <View style={[
+                styles.statsContainer,
+                numColumns > 1 && styles.statsContainerLandscape
+              ]}>
+                <View style={[
+                  styles.statCard,
+                  numColumns > 1 && styles.statCardLandscape
+                ]}>
                   <Text style={styles.statValue}>
                     {stats.total}
                   </Text>
@@ -737,8 +762,23 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       ? { transform: [{ scale: breathingAnimRegister }] }
       : {};
     
+    // Calculate card width based on numColumns and device type
+    // Tablet Portrait (810x1080): 2 columns with optimized padding
+    // Tablet Landscape: 3 columns with optimized padding
+    // Phone Portrait: 1 column (full width)
+    // Phone Landscape (932x430): 2 columns with better spacing
+    const registerHorizontalPadding = isTablet ? (isLandscape ? 16 : 20) : (isLandscape ? 20 : 16);
+    const registerCardGap = isTablet ? (isLandscape ? 16 : 12) : (isLandscape ? 16 : 12);
+    
+    const registerCardWidth = numColumns > 1
+      ? (screenWidth - (registerHorizontalPadding * 2) - (registerCardGap * (numColumns - 1))) / numColumns
+      : undefined;
+    
     return (
-      <Animated.View style={animatedStyle}>
+      <Animated.View style={[
+        animatedStyle,
+        registerCardWidth ? { width: registerCardWidth } : undefined
+      ]}>
         <TouchableOpacity
           onLongPress={() => handleRegisterLongPress(index)}
           onPress={() => {
@@ -754,56 +794,107 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
           activeOpacity={0.9}
           delayLongPress={500}
         >
-        <View style={[styles.cardWrapper, isBeingDragged && styles.beingDragged, canDrop && styles.dropTarget]}>
+        <View style={[
+          styles.cardWrapper, 
+          isBeingDragged ? styles.beingDragged : undefined, 
+          canDrop ? styles.dropTarget : undefined,
+          numColumns > 1 ? { marginBottom: 0 } : undefined
+        ]}>
           <Card
-            style={styles.registerCard}
+            style={[
+              styles.registerCard,
+              numColumns > 1 ? { marginBottom: 0 } : undefined,
+              registerCardWidth ? { width: registerCardWidth } : undefined,
+            ]}
             mode="elevated"
           >
-          <Card.Content>
+          <Card.Content style={numColumns > 1 ? { 
+            flex: 1, 
+            justifyContent: 'space-between',
+            minHeight: isWritable ? (isTablet ? 280 : 320) : (isTablet ? 200 : 220)
+          } : undefined}>
             {/* Modern Header */}
-            <View style={styles.registerHeader}>
+            <View style={[
+              styles.registerHeader,
+              isTablet && numColumns > 1 && styles.registerHeaderTablet
+            ]}>
               <View style={styles.registerHeaderLeft}>
                 <View style={[styles.statusIndicator, { backgroundColor: statusColor }]} />
-                <Text style={[styles.registerName, {color: paperTheme.colors.onSurface}]}>
+                <Text style={[
+                  styles.registerName, 
+                  {color: paperTheme.colors.onSurface},
+                  isTablet && numColumns > 1 && styles.registerNameTablet
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                >
                   {item.name}
                 </Text>
               </View>
               
               <View style={styles.registerBadges}>
                 {/* Type Badge */}
-                <View style={[styles.typeBadge, { backgroundColor: paperTheme.colors.surfaceVariant }]}>
-                  <Text style={[styles.typeText, {color: paperTheme.colors.primary}]}>
+                <View style={[
+                  styles.typeBadge, 
+                  { backgroundColor: paperTheme.colors.surfaceVariant },
+                  isTablet && numColumns > 1 && styles.typeBadgeTablet
+                ]}>
+                  <Text style={[
+                    styles.typeText, 
+                    {color: paperTheme.colors.primary},
+                    isTablet && numColumns > 1 && styles.typeTextTablet
+                  ]}>
                     {item.dataType?.toUpperCase()}
                   </Text>
                 </View>
                 
                 {isRealTime && (
-                  <View style={styles.liveBadgeSmall}>
+                  <View style={[
+                    styles.liveBadgeSmall,
+                    isTablet && numColumns > 1 && styles.liveBadgeSmallTablet
+                  ]}>
                     <View style={styles.pulseIndicatorSmall} />
-                    <Text style={styles.liveTextSmall}>LIVE</Text>
+                    <Text style={[
+                      styles.liveTextSmall,
+                      isTablet && numColumns > 1 && styles.liveTextSmallTablet
+                    ]}>LIVE</Text>
                   </View>
                 )}
               </View>
             </View>
             
             {/* Value Display - Modern */}
-            <View style={[styles.registerValueContainer, { 
-              backgroundColor: isRealTime ? 'rgba(244, 67, 54, 0.08)' : paperTheme.colors.surfaceVariant 
-            }]}>
+            <View style={[
+              styles.registerValueContainer, 
+              { 
+                backgroundColor: isRealTime ? 'rgba(244, 67, 54, 0.08)' : paperTheme.colors.surfaceVariant 
+              },
+              // Responsive padding for tablet
+              isTablet && numColumns > 1 && styles.registerValueContainerTablet
+            ]}>
               <Text
                 style={[
                   styles.registerValue,
                   {
                     color: isRealTime ? '#F44336' : (displayValue === 'Writable' ? paperTheme.colors.primary : paperTheme.colors.onSurface),
-                    fontSize: typeof displayValue === 'number' && displayValue.toString().length > 8 ? 20 : (displayValue === 'Writable' || displayValue === 'N/A' ? 18 : 28),
+                    fontSize: isTablet && numColumns > 1
+                      ? (typeof displayValue === 'number' && displayValue.toString().length > 8 ? 18 : (displayValue === 'Writable' || displayValue === 'N/A' ? 16 : 24))
+                      : (typeof displayValue === 'number' && displayValue.toString().length > 8 ? 20 : (displayValue === 'Writable' || displayValue === 'N/A' ? 18 : 28)),
                     fontStyle: (displayValue === 'Writable' || displayValue === 'N/A') ? 'italic' : 'normal'
                   }
                 ]}
+                numberOfLines={2}
+                adjustsFontSizeToFit={true}
+                minimumFontScale={0.7}
               >
                 {displayValue}
               </Text>
               {item.unit && typeof displayValue === 'number' && (
-                <Text style={[styles.unitText, {color: paperTheme.colors.onSurfaceVariant}]}>
+                <Text style={[
+                  styles.unitText, 
+                  {color: paperTheme.colors.onSurfaceVariant},
+                  isTablet && numColumns > 1 && styles.unitTextTablet
+                ]}>
                   {item.unit}
                 </Text>
               )}
@@ -816,31 +907,51 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
             
             {/* Write Controls - Dropdown, Button, or Numeric Input */}
             {isWritable && (
-              <View style={styles.writeControlsContainer}>
+              <View style={[
+                styles.writeControlsContainer,
+                isTablet && numColumns > 1 && styles.writeControlsContainerTablet
+              ]}>
                 {isDropdown ? (
                   <View style={styles.writeControlSection}>
                     <TouchableOpacity
-                      style={[styles.dropdownButton, { borderColor: paperTheme.colors.outline }]}
+                      style={[
+                        styles.dropdownButton, 
+                        { borderColor: paperTheme.colors.outline },
+                        isTablet && numColumns > 1 && styles.dropdownButtonTablet
+                      ]}
                       onPress={() => updateRegisterState(item._id, { showDropdown: !registerState.showDropdown })}
                     >
-                      <Text style={[styles.dropdownButtonText, !registerState.selectedOption && styles.placeholderText]}>
+                      <Text 
+                        style={[
+                          styles.dropdownButtonText, 
+                          !registerState.selectedOption && styles.placeholderText,
+                          isTablet && numColumns > 1 && styles.dropdownButtonTextTablet
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
                         {registerState.selectedOption ? registerState.selectedOption.label : 'Select a value...'}
                       </Text>
                       <MaterialCommunityIcons
                         name={registerState.showDropdown ? "chevron-up" : "chevron-down"}
-                        size={20}
+                        size={isTablet && numColumns > 1 ? 18 : 20}
                         color={paperTheme.colors.onSurfaceVariant}
                       />
                     </TouchableOpacity>
                     {registerState.showDropdown && (
-                      <View style={[styles.dropdownList, { borderColor: paperTheme.colors.outline }]}>
+                      <View style={[
+                        styles.dropdownList, 
+                        { borderColor: paperTheme.colors.outline },
+                        isTablet && numColumns > 1 && styles.dropdownListTablet
+                      ]}>
                         <ScrollView style={styles.dropdownScrollView} nestedScrollEnabled={true}>
                           {item.dropdownOptions?.map((option, optIndex) => (
                             <TouchableOpacity
                               key={optIndex}
                               style={[
                                 styles.dropdownItem,
-                                registerState.selectedOption?.value === option.value && styles.dropdownItemSelected
+                                registerState.selectedOption?.value === option.value && styles.dropdownItemSelected,
+                                isTablet && numColumns > 1 && styles.dropdownItemTablet
                               ]}
                               onPress={() => updateRegisterState(item._id, { 
                                 selectedOption: option, 
@@ -849,8 +960,12 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
                             >
                               <Text style={[
                                 styles.dropdownItemText,
-                                registerState.selectedOption?.value === option.value && styles.dropdownItemTextSelected
-                              ]}>
+                                registerState.selectedOption?.value === option.value && styles.dropdownItemTextSelected,
+                                isTablet && numColumns > 1 && styles.dropdownItemTextTablet
+                              ]}
+                              numberOfLines={1}
+                              ellipsizeMode="tail"
+                              >
                                 {option.label}
                               </Text>
                             </TouchableOpacity>
@@ -860,22 +975,34 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
                     )}
                   </View>
                 ) : isButton ? (
-                  <View style={styles.stateButtonContainer}>
+                  <View style={[
+                    styles.stateButtonContainer,
+                    isTablet && numColumns > 1 && styles.stateButtonContainerTablet
+                  ]}>
                     <TouchableOpacity
                       style={[
                         styles.stateButton,
                         registerState.selectedButton === 'on' && styles.stateButtonSelected,
-                        registerState.selectedButton === 'on' && styles.stateButtonOn
+                        registerState.selectedButton === 'on' && styles.stateButtonOn,
+                        isTablet && numColumns > 1 && styles.stateButtonTablet
                       ]}
                       onPress={() => updateRegisterState(item._id, { selectedButton: 'on' })}
                     >
                       <Text style={[
                         styles.stateButtonText,
-                        registerState.selectedButton === 'on' && styles.stateButtonTextSelected
-                      ]}>
+                        registerState.selectedButton === 'on' && styles.stateButtonTextSelected,
+                        isTablet && numColumns > 1 && styles.stateButtonTextTablet
+                      ]}
+                      numberOfLines={1}
+                      >
                         ON state
                       </Text>
-                      <Text style={styles.stateButtonValue}>
+                      <Text style={[
+                        styles.stateButtonValue,
+                        isTablet && numColumns > 1 && styles.stateButtonValueTablet
+                      ]}
+                      numberOfLines={1}
+                      >
                         {item.onValue !== undefined && item.onValue !== null ? item.onValue : 'N/A'}
                       </Text>
                     </TouchableOpacity>
@@ -883,17 +1010,26 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
                       style={[
                         styles.stateButton,
                         registerState.selectedButton === 'off' && styles.stateButtonSelected,
-                        registerState.selectedButton === 'off' && styles.stateButtonOff
+                        registerState.selectedButton === 'off' && styles.stateButtonOff,
+                        isTablet && numColumns > 1 && styles.stateButtonTablet
                       ]}
                       onPress={() => updateRegisterState(item._id, { selectedButton: 'off' })}
                     >
                       <Text style={[
                         styles.stateButtonText,
-                        registerState.selectedButton === 'off' && styles.stateButtonTextSelected
-                      ]}>
+                        registerState.selectedButton === 'off' && styles.stateButtonTextSelected,
+                        isTablet && numColumns > 1 && styles.stateButtonTextTablet
+                      ]}
+                      numberOfLines={1}
+                      >
                         OFF state
                       </Text>
-                      <Text style={styles.stateButtonValue}>
+                      <Text style={[
+                        styles.stateButtonValue,
+                        isTablet && numColumns > 1 && styles.stateButtonValueTablet
+                      ]}
+                      numberOfLines={1}
+                      >
                         {item.offValue !== undefined && item.offValue !== null ? item.offValue : 'N/A'}
                       </Text>
                     </TouchableOpacity>
@@ -901,7 +1037,11 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
                 ) : (
                   <View style={styles.writeControlSection}>
                     <TextInput
-                      style={[styles.numericInput, { borderColor: paperTheme.colors.outline }]}
+                      style={[
+                        styles.numericInput, 
+                        { borderColor: paperTheme.colors.outline },
+                        isTablet && numColumns > 1 && styles.numericInputTablet
+                      ]}
                       value={registerState.value || ''}
                       onChangeText={(text) => updateRegisterState(item._id, { value: text })}
                       placeholder="Enter numeric value"
@@ -912,10 +1052,19 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
                 
                 {/* Write Button */}
                 <TouchableOpacity
-                  style={[styles.writeActionButton, { backgroundColor: paperTheme.colors.primary }]}
+                  style={[
+                    styles.writeActionButton, 
+                    { backgroundColor: paperTheme.colors.primary },
+                    isTablet && numColumns > 1 && styles.writeActionButtonTablet
+                  ]}
                   onPress={() => handleWriteRegister(item)}
                 >
-                  <Text style={styles.writeActionButtonText}>Write</Text>
+                  <Text style={[
+                    styles.writeActionButtonText,
+                    isTablet && numColumns > 1 && styles.writeActionButtonTextTablet
+                  ]}>
+                    Write
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -925,11 +1074,18 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
               <View style={styles.footerLeft}>
                 <MaterialCommunityIcons
                   name="clock-outline"
-                  size={12}
+                  size={isTablet && numColumns > 1 ? 11 : 12}
                   color={paperTheme.colors.onSurfaceVariant}
                   style={styles.clockIcon}
                 />
-                <Text style={[styles.lastUpdate, {color: paperTheme.colors.onSurfaceVariant}]}>
+                <Text style={[
+                  styles.lastUpdate, 
+                  {color: paperTheme.colors.onSurfaceVariant},
+                  isTablet && numColumns > 1 && styles.lastUpdateTablet
+                ]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                >
                   {item.timestamp ? new Date(item.timestamp).toLocaleTimeString('tr-TR', { 
                     hour: '2-digit', 
                     minute: '2-digit' 
@@ -940,7 +1096,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
               {!isWritable && (
                 <MaterialCommunityIcons
                   name="lock-outline"
-                  size={16}
+                  size={isTablet && numColumns > 1 ? 14 : 16}
                   color={paperTheme.colors.onSurfaceVariant}
                 />
               )}
@@ -1021,10 +1177,23 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
           }}
         >
           <FlatList
+          key={`analyzers-${isLandscape ? 'landscape' : 'portrait'}`}
           data={sortedAnalyzers}
           renderItem={renderAnalyzerItem}
           keyExtractor={(item) => item[0]}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingHorizontal: isTablet ? (isLandscape ? 16 : 20) : (isLandscape ? 20 : 16),
+            },
+            numColumns > 1 && styles.contentLandscape
+          ]}
+          numColumns={numColumns}
+          columnWrapperStyle={numColumns > 1 ? {
+            ...styles.columnWrapper,
+            gap: isTablet ? (isLandscape ? 16 : 12) : (isLandscape ? 16 : 12),
+            paddingHorizontal: 0,
+          } : undefined}
           refreshControl={
             <RefreshControl 
               refreshing={isRefreshing} 
@@ -1114,10 +1283,25 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       </View>
       
       <FlatList
+        key={`registers-${isLandscape ? 'landscape' : 'portrait'}-${numColumns}`}
         data={selectedRegisters}
         renderItem={renderRegisterItem}
         keyExtractor={(item) => item._id}
-        contentContainerStyle={[styles.content, { paddingTop: 8 }]}
+        contentContainerStyle={[
+          styles.content, 
+          { paddingTop: 8 },
+          {
+            paddingHorizontal: isTablet ? (isLandscape ? 16 : 20) : (isLandscape ? 20 : 16),
+          },
+          numColumns > 1 ? styles.contentLandscape : undefined
+        ]}
+        numColumns={numColumns}
+        columnWrapperStyle={numColumns > 1 ? {
+          ...styles.columnWrapper,
+          gap: isTablet ? (isLandscape ? 16 : 12) : (isLandscape ? 16 : 12),
+          paddingHorizontal: 0,
+          alignItems: 'stretch', // Ensure cards in same row have same height
+        } : undefined}
         refreshControl={
           <RefreshControl 
             refreshing={isRefreshing} 
@@ -1181,15 +1365,30 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardWrapper: {
-    marginVertical: 4,
+    marginVertical: 8, // Increased from 4 to 8 for better spacing
     marginHorizontal: 0,
+    flex: 1,
+    minWidth: 0,
+    // Ensure cards stretch to fill available space in grid
+    alignSelf: 'stretch',
   },
   valueWrapper: {
     marginVertical: 4,
   },
   content: {
-    padding: 16,
+    paddingTop: 16,
     paddingBottom: 32,
+    // paddingHorizontal will be set dynamically based on device type
+  },
+  contentLandscape: {
+    // paddingHorizontal will be set dynamically
+  },
+  columnWrapper: {
+    justifyContent: 'flex-start',
+    paddingHorizontal: 0,
+    // gap will be set dynamically based on device type
+    alignItems: 'stretch', // Ensure cards in same row have same height
+    marginBottom: 0, // Remove bottom margin from wrapper
   },
   centered: {
     justifyContent: 'center',
@@ -1228,7 +1427,10 @@ const styles = StyleSheet.create({
   // Modern Analyzer Card Styles
   analyzerCard: {
     elevation: 3,
-    marginBottom: 12,
+    marginBottom: 0, // Margin handled by cardWrapper
+    flex: 1,
+    marginHorizontal: 0,
+    minWidth: 0,
   },
   blurContainer: {
     flex: 1,
@@ -1287,6 +1489,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     justifyContent: 'center',
   },
+  statsContainerLandscape: {
+    justifyContent: 'flex-start',
+  },
   statCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 10,
@@ -1294,7 +1499,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
-    minWidth: 320,
+    flex: 1,
+    minWidth: 100,
+  },
+  statCardLandscape: {
+    flex: 1,
+    minWidth: 0,
   },
   liveStatCard: {
     backgroundColor: 'rgba(244, 67, 54, 0.15)',
@@ -1330,9 +1540,12 @@ const styles = StyleSheet.create({
   
   // Modern Register Card Styles
   registerCard: {
-    marginBottom: 12,
+    marginBottom: 0, // Margin handled by cardWrapper
     borderRadius: 12,
     elevation: 2,
+    flex: 1,
+    marginHorizontal: 0,
+    minWidth: 0,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1340,18 +1553,26 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.08,
     shadowRadius: 3,
+    // Ensure cards fill available space in grid layout and have consistent height
+    alignSelf: 'stretch',
+    width: '100%',
   },
   registerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
+    flexWrap: 'wrap',
+  },
+  registerHeaderTablet: {
+    marginBottom: 10,
   },
   registerHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
     marginRight: 8,
+    minWidth: 0,
   },
   statusIndicator: {
     width: 8,
@@ -1363,6 +1584,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'wrap',
   },
   liveBadgeSmall: {
     backgroundColor: '#F44336',
@@ -1372,6 +1594,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     marginLeft: 6,
+  },
+  liveBadgeSmallTablet: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginLeft: 4,
   },
   pulseIndicatorSmall: {
     width: 4,
@@ -1386,6 +1614,10 @@ const styles = StyleSheet.create({
     color: 'white',
     letterSpacing: 0.5,
   },
+  liveTextSmallTablet: {
+    fontSize: 8,
+    letterSpacing: 0.3,
+  },
   registerValueContainer: {
     borderRadius: 12,
     padding: 16,
@@ -1393,23 +1625,37 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     minHeight: 80,
     justifyContent: 'center',
+    flexShrink: 1,
+  },
+  registerValueContainerTablet: {
+    padding: 12,
+    minHeight: 70,
   },
   registerName: {
     fontSize: 15,
     fontWeight: '700',
     color: 'rgba(0,0,0,0.87)',
     flex: 1,
+    flexShrink: 1,
+  },
+  registerNameTablet: {
+    fontSize: 14,
   },
   registerValue: {
     fontSize: 28,
     fontWeight: '800',
     letterSpacing: -0.5,
     marginBottom: 4,
+    flexShrink: 1,
+    flexWrap: 'wrap',
   },
   unitText: {
     fontSize: 13,
     fontWeight: '500',
     marginTop: 4,
+  },
+  unitTextTablet: {
+    fontSize: 11,
   },
   typeBadge: {
     flexDirection: 'row',
@@ -1419,11 +1665,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
+  typeBadgeTablet: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
   typeText: {
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  typeTextTablet: {
+    fontSize: 9,
   },
   registerFooter: {
     flexDirection: 'row',
@@ -1432,6 +1686,8 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(0,0,0,0.08)',
+    // Push footer to bottom when using flex layout in grid mode
+    marginTop: 'auto',
   },
   footerLeft: {
     flexDirection: 'row',
@@ -1444,6 +1700,9 @@ const styles = StyleSheet.create({
   lastUpdate: {
     fontSize: 11,
     fontWeight: '500',
+  },
+  lastUpdateTablet: {
+    fontSize: 10,
   },
   writeButtonContainer: {
     padding: 4,
@@ -1588,6 +1847,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
   },
+  writeControlsContainerTablet: {
+    marginTop: 10,
+    marginBottom: 6,
+  },
   writeControlSection: {
     marginBottom: 12,
   },
@@ -1600,10 +1863,17 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: '#fff',
   },
+  dropdownButtonTablet: {
+    padding: 10,
+    borderRadius: 6,
+  },
   dropdownButtonText: {
     fontSize: 14,
     color: '#2c3e50',
     flex: 1,
+  },
+  dropdownButtonTextTablet: {
+    fontSize: 12,
   },
   placeholderText: {
     color: '#95a5a6',
@@ -1620,6 +1890,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
+  dropdownListTablet: {
+    maxHeight: 120,
+    borderRadius: 6,
+  },
   dropdownScrollView: {
     maxHeight: 150,
   },
@@ -1628,12 +1902,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#eee',
   },
+  dropdownItemTablet: {
+    padding: 10,
+  },
   dropdownItemSelected: {
     backgroundColor: '#e3f2fd',
   },
   dropdownItemText: {
     fontSize: 14,
     color: '#2c3e50',
+  },
+  dropdownItemTextTablet: {
+    fontSize: 12,
   },
   dropdownItemTextSelected: {
     color: '#1976d2',
@@ -1645,6 +1925,10 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  stateButtonContainerTablet: {
+    gap: 8,
+    marginBottom: 10,
+  },
   stateButton: {
     flex: 1,
     borderWidth: 2,
@@ -1653,6 +1937,10 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     backgroundColor: '#fff',
+  },
+  stateButtonTablet: {
+    padding: 10,
+    borderRadius: 6,
   },
   stateButtonSelected: {
     borderWidth: 2,
@@ -1671,6 +1959,10 @@ const styles = StyleSheet.create({
     color: '#2c3e50',
     marginBottom: 4,
   },
+  stateButtonTextTablet: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
   stateButtonTextSelected: {
     color: '#1976d2',
   },
@@ -1679,6 +1971,9 @@ const styles = StyleSheet.create({
     color: '#7f8c8d',
     fontWeight: '500',
   },
+  stateButtonValueTablet: {
+    fontSize: 11,
+  },
   numericInput: {
     borderWidth: 1,
     borderRadius: 8,
@@ -1686,16 +1981,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: '#fff',
   },
+  numericInputTablet: {
+    padding: 10,
+    fontSize: 13,
+    borderRadius: 6,
+  },
   writeActionButton: {
     borderRadius: 8,
     padding: 12,
     alignItems: 'center',
     marginTop: 8,
   },
+  writeActionButtonTablet: {
+    padding: 10,
+    borderRadius: 6,
+    marginTop: 6,
+  },
   writeActionButtonText: {
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
+  },
+  writeActionButtonTextTablet: {
+    fontSize: 12,
   },
   writableBadge: {
     backgroundColor: 'rgba(33, 150, 243, 0.1)',

@@ -2,6 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Card, Chip, IconButton, useTheme } from 'react-native-paper';
+import { useOrientation } from '../context/OrientationContext';
 import { TrendLogData } from '../screens/LogsScreen';
 import { AppTheme } from '../theme/theme';
 
@@ -15,10 +16,16 @@ const LogCard: React.FC<LogCardProps> = ({
   onPress
 }) => {
   const theme = useTheme() as AppTheme;
+  const { isLandscape, screenWidth, numColumns } = useOrientation();
   
   const isRunning = log.status === 'running';
   const endDate = new Date(log.endDate);
   const isExpired = endDate < new Date();
+  
+  // Calculate card width based on numColumns
+  const logCardWidth = numColumns > 1
+    ? (screenWidth - 24 - (12 * (numColumns - 1))) / numColumns
+    : undefined;
   
   // Determine status color
   const getStatusColor = () => {
@@ -30,9 +37,16 @@ const LogCard: React.FC<LogCardProps> = ({
   const statusColor = getStatusColor();
 
   return (
-    <View style={styles.cardWrapper}>
+    <View style={[
+      styles.cardWrapper,
+      isLandscape && logCardWidth !== undefined && { width: logCardWidth },
+      isLandscape && { marginBottom: 0, flex: 1, minWidth: 0 }
+    ]}>
       <Card
-        style={styles.registerCard}
+        style={[
+          styles.registerCard,
+          isLandscape && { marginBottom: 0, flex: 1, minWidth: 0 }
+        ]}
         mode="elevated"
         onPress={onPress}
       >
@@ -115,22 +129,31 @@ const styles = StyleSheet.create({
   cardWrapper: {
     marginVertical: 4,
     marginHorizontal: 0,
+    flex: 1,
+    minWidth: 0,
   },
   registerCard: {
     marginBottom: 12,
     borderRadius: 10,
     elevation: 2,
+    flex: 1,
+    marginHorizontal: 0,
+    minWidth: 0,
   },
   registerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   registerHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   statusIndicator: {
     width: 6,
@@ -141,11 +164,14 @@ const styles = StyleSheet.create({
   registerAddress: {
     fontSize: 12,
     fontWeight: '600',
+    flexShrink: 1,
   },
   registerBadges: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'wrap',
+    flexShrink: 0,
   },
   liveBadgeSmall: {
     backgroundColor: '#4CAF50',
@@ -180,6 +206,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     marginBottom: 10,
+    width: '100%',
   },
   valueContent: {
     flex: 1,
@@ -189,6 +216,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
     color: 'rgba(0,0,0,0.7)',
+    flexWrap: 'wrap',
   },
   valueRow: {
     flexDirection: 'row',
@@ -202,6 +230,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 2,
+    flexWrap: 'wrap',
   },
   endDateText: {
     fontSize: 11,

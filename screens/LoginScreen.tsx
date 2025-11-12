@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import { useConnection } from '../context/ConnectionContext';
+import { useOrientation } from '../context/OrientationContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import ApiService from '../services/ApiService';
 import AuthService from '../services/AuthService';
@@ -62,6 +63,7 @@ interface Agent {
 export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: LoginScreenProps = {}) {
   const { connect } = useConnection();
   const { selectAgent, clearAllRegisterValues } = useWebSocket();
+  const { isTablet, screenWidth, isLandscape } = useOrientation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -414,6 +416,7 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
             <Animated.View 
               style={[
                 styles.logoContainer,
+                isTablet && styles.logoContainerTablet,
                 {
                   transform: [
                     { scale: logoScaleAnim },
@@ -449,6 +452,7 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
             <Animated.View 
               style={[
                 styles.formContainer,
+                isTablet && styles.formContainerTablet,
                 {
                   opacity: formOpacityAnim,
                   transform: [
@@ -467,7 +471,10 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
                 tint="light"
                 style={styles.blurContainer}
               >
-                <View style={styles.formContent}>
+                <View style={[
+                  styles.formContent,
+                  isTablet && styles.formContentTablet
+                ]}>
                   {/* Welcome Text */}
                   <View style={styles.welcomeSection}>
                     <Text style={styles.welcomeTitle}>Welcome Back</Text>
@@ -668,7 +675,10 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
         onRequestClose={() => setShowAgentSelector(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[
+            styles.modalContent,
+            isTablet && { maxWidth: 600 }
+          ]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select SCADA System</Text>
               <TouchableOpacity 
@@ -869,11 +879,17 @@ const styles = StyleSheet.create({
     paddingTop: height * 0.20, // Logo mavi ve beyaz arasında görünsün
     paddingBottom: 40,
     zIndex: 1,
+    maxWidth: '100%',
+    width: '100%',
+    alignItems: 'center',
   },
   // Logo styles
   logoContainer: {
     alignItems: 'center',
     marginBottom: 24,
+  },
+  logoContainerTablet: {
+    marginBottom: 32,
   },
   logoWrapper: {
     marginBottom: 24,
@@ -941,6 +957,11 @@ const styles = StyleSheet.create({
     elevation: 15,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+    width: '100%',
+  },
+  formContainerTablet: {
+    maxWidth: 500,
+    width: '100%',
   },
   blurContainer: {
     borderRadius: 28,
@@ -948,6 +969,9 @@ const styles = StyleSheet.create({
   formContent: {
     padding: 28,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
+  },
+  formContentTablet: {
+    padding: 36,
   },
   // Welcome section
   welcomeSection: {

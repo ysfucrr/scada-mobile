@@ -22,6 +22,7 @@ import {
 } from 'react-native-paper';
 import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
+import { useOrientation } from '../context/OrientationContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import ApiService, { ServerSettings } from '../services/ApiService';
 import AuthService from '../services/AuthService';
@@ -34,6 +35,7 @@ interface SettingsScreenProps {
 export default function SettingsScreen({ onConnectionSuccess, onUseDemo }: SettingsScreenProps = {}) {
   const paperTheme = usePaperTheme();
   const { isDarkMode } = useAppTheme();
+  const { isTablet, screenWidth, isLandscape } = useOrientation();
   const { settings, updateSettings, isConnected, disconnect } = useConnection();
   
   const [serverHost, setServerHost] = useState('');
@@ -175,23 +177,34 @@ export default function SettingsScreen({ onConnectionSuccess, onUseDemo }: Setti
       
       {/* Modern Header */}
       <View style={[styles.modernHeader, { backgroundColor: 'rgba(33, 150, 243, 0.15)' }]}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerTextContainer}>
-            <Text style={[styles.headerTitle, { color: paperTheme.colors.primary }]}>Settings</Text>
-            <Text style={[styles.headerSubtitle, { color: paperTheme.colors.onSurfaceVariant }]}>Server Connection Configuration</Text>
-          </View>
-          {isConnected && (
-            <View style={[styles.connectedBadge, { backgroundColor: 'rgba(76, 175, 80, 0.9)' }]}>
-              <View style={styles.connectedDot} />
-              <Text style={styles.connectedText}>CONNECTED</Text>
+        <View style={styles.headerWrapper}>
+          <View style={[
+            styles.headerContent,
+            isTablet ? styles.headerContentTablet : undefined
+          ]}>
+            <View style={styles.headerTextContainer}>
+              <Text style={[styles.headerTitle, { color: paperTheme.colors.primary }]}>Settings</Text>
+              <Text style={[styles.headerSubtitle, { color: paperTheme.colors.onSurfaceVariant }]}>Server Connection Configuration</Text>
             </View>
-          )}
+            {isConnected && (
+              <View style={[styles.connectedBadge, { backgroundColor: 'rgba(76, 175, 80, 0.9)' }]}>
+                <View style={styles.connectedDot} />
+                <Text style={styles.connectedText}>CONNECTED</Text>
+              </View>
+            )}
+          </View>
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[
+        styles.content,
+        isTablet ? styles.contentTablet : undefined
+      ]}>
         {/* Server Configuration Card */}
-        <Card style={styles.configCard} mode="elevated">
+        <Card style={[
+          styles.configCard,
+          isTablet ? styles.configCardTablet : undefined
+        ]} mode="elevated">
           <Card.Content>
             <View style={styles.sectionHeader}>
               <View style={styles.iconWrapper}>
@@ -265,7 +278,10 @@ export default function SettingsScreen({ onConnectionSuccess, onUseDemo }: Setti
         {/* Connection Info Card */}
         <GradientCard
           colors={['#1976D2', '#2196F3']}
-          style={styles.infoCard}
+          style={StyleSheet.flatten([
+            styles.infoCard,
+            ...(isTablet ? [styles.infoCardTablet] : [])
+          ])}
           mode="elevated"
         >
           <BlurView
@@ -314,7 +330,10 @@ export default function SettingsScreen({ onConnectionSuccess, onUseDemo }: Setti
         </GradientCard>
 
         {/* Use Demo Button */}
-        <View style={styles.buttonContainer}>
+        <View style={[
+          styles.buttonContainer,
+          isTablet ? styles.buttonContainerTablet : undefined
+        ]}>
           <TouchableOpacity
             style={[styles.actionButton, styles.demoButton, { backgroundColor: '#FF9800' }]}
             onPress={handleUseDemo}
@@ -331,7 +350,10 @@ export default function SettingsScreen({ onConnectionSuccess, onUseDemo }: Setti
         </View>
 
         {/* Action Button */}
-        <View style={styles.buttonContainer}>
+        <View style={[
+          styles.buttonContainer,
+          isTablet ? styles.buttonContainerTablet : undefined
+        ]}>
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: paperTheme.colors.primary }]}
             onPress={handleSaveAndConnect}
@@ -359,6 +381,16 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+    width: '100%',
+    maxWidth: '100%',
+    alignItems: 'stretch',
+  },
+  contentTablet: {
+    padding: 24,
+    maxWidth: 700,
+    width: '100%',
+    alignSelf: 'center',
+    alignItems: 'stretch',
   },
   centered: {
     justifyContent: 'center',
@@ -374,12 +406,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 0, 0, 0.08)',
   },
+  headerWrapper: {
+    width: '100%',
+    alignItems: 'center',
+  },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
+    width: '100%',
+    maxWidth: '100%',
+  },
+  headerContentTablet: {
+    maxWidth: 700,
+    width: '100%',
+    paddingHorizontal: 24,
   },
   headerTextContainer: {
     flex: 1,
@@ -418,6 +461,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 16,
     elevation: 3,
+    width: '100%',
+  },
+  configCardTablet: {
+    width: '100%',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -482,6 +529,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderRadius: 16,
     elevation: 3,
+    width: '100%',
+  },
+  infoCardTablet: {
+    width: '100%',
   },
   blurContainer: {
     flex: 1,
@@ -534,6 +585,10 @@ const styles = StyleSheet.create({
   // Action Buttons
   buttonContainer: {
     gap: 12,
+    width: '100%',
+  },
+  buttonContainerTablet: {
+    width: '100%',
   },
   actionButton: {
     flexDirection: 'row',

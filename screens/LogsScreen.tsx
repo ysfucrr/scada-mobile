@@ -24,6 +24,7 @@ import LogCard from '../components/LogCard';
 
 // Contexts
 import { useConnection } from '../context/ConnectionContext';
+import { useOrientation } from '../context/OrientationContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 
 // Services
@@ -54,6 +55,7 @@ export default function LogsScreen() {
   const { isConnected } = useConnection();
   const { isDarkMode } = useAppTheme();
   const paperTheme = usePaperTheme();
+  const { isLandscape, screenWidth, numColumns } = useOrientation();
   
   const [trendLogs, setTrendLogs] = useState<TrendLogData[]>([]);
   const [groupedLogs, setGroupedLogs] = useState<Map<string, TrendLogData[]>>(new Map());
@@ -572,6 +574,7 @@ export default function LogsScreen() {
         </View>
         
         <FlatList
+          key={`logs-${isLandscape ? 'landscape' : 'portrait'}`}
           data={selectedLogs}
           renderItem={({ item }) => (
             <LogCard 
@@ -580,7 +583,13 @@ export default function LogsScreen() {
             />
           )}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={[styles.content, { paddingTop: 8 }]}
+          contentContainerStyle={[
+            styles.content, 
+            { paddingTop: 8 },
+            numColumns > 1 ? styles.contentLandscape : undefined
+          ]}
+          numColumns={numColumns}
+          columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
           refreshControl={
             <RefreshControl 
               refreshing={isRefreshing} 
@@ -617,6 +626,11 @@ export default function LogsScreen() {
       ? { transform: [{ scale: breathingAnim }] }
       : {};
     
+    // Calculate card width based on numColumns
+    const analyzerCardWidth = numColumns > 1
+      ? (screenWidth - 24 - (12 * (numColumns - 1))) / numColumns
+      : undefined;
+    
     return (
       <TouchableOpacity
         onLongPress={() => handleAnalyzerLongPress(index)}
@@ -635,16 +649,22 @@ export default function LogsScreen() {
           }
         }}
         activeOpacity={0.9}
-        delayLongPress={300}
+        delayLongPress={500}
       >
-        <Animated.View style={[styles.cardWrapper, animatedStyle]}>
+        <Animated.View style={[
+          styles.cardWrapper, 
+          animatedStyle,
+          analyzerCardWidth ? { width: analyzerCardWidth } : undefined,
+          numColumns > 1 ? { marginBottom: 0 } : undefined
+        ]}>
           <GradientCard
             colors={gradientColors}
-            style={{
-              ...styles.analyzerCard,
-              ...(isBeingDragged ? styles.beingDragged : {}),
-              ...(canDrop ? styles.dropTarget : {})
-            }}
+            style={StyleSheet.flatten([
+              styles.analyzerCard,
+              isBeingDragged ? styles.beingDragged : undefined,
+              canDrop ? styles.dropTarget : undefined,
+              numColumns > 1 ? { marginBottom: 0 } : undefined
+            ])}
             mode="elevated"
           >
           <BlurView
@@ -679,8 +699,14 @@ export default function LogsScreen() {
               </View>
               
               {/* Stats */}
-              <View style={styles.statsContainer}>
-                <View style={styles.statCard}>
+              <View style={[
+                styles.statsContainer,
+                numColumns > 1 ? styles.statsContainerLandscape : undefined
+              ]}>
+                <View style={[
+                  styles.statCard,
+                  numColumns > 1 ? styles.statCardLandscape : undefined
+                ]}>
                   <Text style={styles.statValue}>
                     {stats.total}
                   </Text>
@@ -732,11 +758,17 @@ export default function LogsScreen() {
         }}
       >
         <FlatList
+        key={`analyzers-${isLandscape ? 'landscape' : 'portrait'}`}
         data={sortedAnalyzers}
         renderItem={renderAnalyzerItem}
         keyExtractor={(item) => item[0]}
         extraData={draggedAnalyzerIndex}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          numColumns > 1 ? styles.contentLandscape : undefined
+        ]}
+        numColumns={numColumns}
+        columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
         refreshControl={
           <RefreshControl 
             refreshing={isRefreshing} 
@@ -781,6 +813,14 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 32,
   },
+  contentLandscape: {
+    paddingHorizontal: 12,
+  },
+  columnWrapper: {
+    justifyContent: 'flex-start',
+    paddingHorizontal: 0,
+    gap: 12,
+  },
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
@@ -789,10 +829,15 @@ const styles = StyleSheet.create({
   cardWrapper: {
     marginVertical: 4,
     marginHorizontal: 0,
+    flex: 1,
+    minWidth: 0,
   },
   analyzerCard: {
     elevation: 3,
     marginBottom: 12,
+    flex: 1,
+    marginHorizontal: 0,
+    minWidth: 0,
   },
   blurContainer: {
     flex: 1,
@@ -851,6 +896,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     justifyContent: 'center',
   },
+  statsContainerLandscape: {
+    justifyContent: 'flex-start',
+  },
   statCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 10,
@@ -858,7 +906,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
-    minWidth: 320,
+    flex: 1,
+    minWidth: 100,
+  },
+  statCardLandscape: {
+    flex: 1,
+    minWidth: 0,
   },
   liveStatCard: {
     backgroundColor: 'rgba(76, 175, 80, 0.25)',

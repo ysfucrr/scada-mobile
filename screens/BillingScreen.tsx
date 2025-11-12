@@ -12,7 +12,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Dimensions,
   Platform,
   ToastAndroid
 } from 'react-native';
@@ -20,6 +19,7 @@ import { ActivityIndicator, useTheme as usePaperTheme } from 'react-native-paper
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
+import { useOrientation } from '../context/OrientationContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import ApiService from '../services/ApiService';
@@ -44,13 +44,12 @@ interface BillingType {
   updatedAt?: string;
 }
 
-const { width: screenWidth } = Dimensions.get('window');
-
 export default function BillingScreen() {
   const paperTheme = usePaperTheme();
   const { isDarkMode } = useAppTheme();
   const { isConnected } = useConnection();
   const { isConnected: wsConnected, connect: wsConnect, watchRegister, unwatchRegister } = useWebSocket();
+  const { isLandscape, screenWidth, numColumns } = useOrientation();
   
   const [billings, setBillings] = useState<BillingType[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -427,6 +426,11 @@ export default function BillingScreen() {
       ? { transform: [{ scale: breathingAnim }] }
       : {};
 
+    // Calculate card width based on numColumns
+    const billingCardWidth = numColumns > 1
+      ? (screenWidth - 24 - (12 * (numColumns - 1))) / numColumns
+      : undefined;
+
     return (
       <TouchableOpacity
         onLongPress={() => handleBillingLongPress(index)}
@@ -449,9 +453,11 @@ export default function BillingScreen() {
       >
       <Animated.View style={[
         styles.billingCardWrapper,
-        isBeingDragged && styles.beingDragged,
-        canDrop && styles.dropTarget,
-        animatedStyle
+        isBeingDragged ? styles.beingDragged : undefined,
+        canDrop ? styles.dropTarget : undefined,
+        animatedStyle,
+        billingCardWidth ? { width: billingCardWidth } : undefined,
+        numColumns > 1 ? { marginBottom: 0 } : undefined
       ]}>
         <GradientCard
           colors={gradientColors}
@@ -697,10 +703,13 @@ export default function BillingScreen() {
           </View>
         ) : (
           <FlatList
+            key={`billings-${isLandscape ? 'landscape' : 'portrait'}`}
             data={billings}
             keyExtractor={(item) => item._id}
             renderItem={renderBillingItem}
             extraData={draggedBillingIndex}
+            numColumns={numColumns}
+            columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
@@ -709,7 +718,10 @@ export default function BillingScreen() {
                 tintColor={paperTheme.colors.primary}
               />
             }
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              numColumns > 1 ? styles.listContentLandscape : undefined
+            ]}
             showsVerticalScrollIndicator={false}
           />
         )}
@@ -770,8 +782,18 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
   },
+  listContentLandscape: {
+    paddingHorizontal: 12,
+  },
+  columnWrapper: {
+    justifyContent: 'flex-start',
+    paddingHorizontal: 0,
+    gap: 12,
+  },
   billingCardWrapper: {
     marginBottom: 20,
+    flex: 1,
+    minWidth: 0,
   },
   billingCard: {
     borderRadius: 20,

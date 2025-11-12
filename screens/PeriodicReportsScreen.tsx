@@ -179,6 +179,7 @@ export default function PeriodicReportsScreen() {
         
         setPreviewData({
           subject: `${report.description} - ${new Date().toLocaleDateString()}`,
+          html: '<p>Demo preview content</p>',
           recipients: ['demo@example.com', 'admin@example.com'],
           trendLogs: [
             {
