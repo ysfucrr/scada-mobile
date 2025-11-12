@@ -763,10 +763,14 @@ function MainApp() {
     });
   };
 
+  const handleNavigateToSettings = () => {
+    setCurrentScreen('Settings');
+  };
+
   const renderCurrentScreen = () => {
     // Login ve Settings ekranları authentication gerektirmez
     if (currentScreen === 'Login') {
-      return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+      return <LoginScreen onLoginSuccess={handleLoginSuccess} onNavigateToSettings={handleNavigateToSettings} />;
     }
     
     if (currentScreen === 'Settings') {
@@ -779,7 +783,7 @@ function MainApp() {
     
     // Diğer ekranlar authentication gerektirir
     if (!isAuthenticated) {
-      return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+      return <LoginScreen onLoginSuccess={handleLoginSuccess} onNavigateToSettings={handleNavigateToSettings} />;
     }
     
     switch (currentScreen) {

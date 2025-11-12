@@ -684,7 +684,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   trendLogsContainer: {
-    marginBottom: 16,
+    marginBottom: 6,
   },
   trendLogsTitle: {
     fontSize: 16,
@@ -758,7 +758,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   footerInfo: {
-    paddingTop: 16,
+    paddingTop: 8,
+    marginTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.2)',
   },

@@ -48,6 +48,7 @@ const theme = {
 
 interface LoginScreenProps {
   onLoginSuccess?: () => void;
+  onNavigateToSettings?: () => void;
 }
 
 // Agent bilgisi için tip tanımı
@@ -58,7 +59,7 @@ interface Agent {
   uptime: number;
 }
 
-export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
+export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: LoginScreenProps = {}) {
   const { connect } = useConnection();
   const { selectAgent, clearAllRegisterValues } = useWebSocket();
   const [username, setUsername] = useState('');
@@ -370,7 +371,24 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps = {}) {
         <View style={styles.decorativeCircle1} />
         <View style={styles.decorativeCircle2} />
         <View style={styles.decorativeCircle3} />
+        
       </Animated.View>
+      
+      {/* Settings Button - Top Right (Outside topBlueSection for better touch handling) */}
+      {onNavigateToSettings && (
+        <TouchableOpacity
+          style={styles.settingsIconButton}
+          onPress={onNavigateToSettings}
+          activeOpacity={0.7}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <MaterialCommunityIcons 
+            name="cog-outline" 
+            size={24} 
+            color="#FFFFFF" 
+          />
+        </TouchableOpacity>
+      )}
 
       {/* Bottom White Section */}
       <View style={styles.bottomWhiteSection} />
@@ -823,6 +841,29 @@ const styles = StyleSheet.create({
     top: height * 0.15,
     right: 20,
   },
+  // Settings icon button (top right)
+  settingsIconButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 40,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000, // Very high z-index to ensure it's on top
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    elevation: 10, // Android shadow/elevation
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
   content: {
     paddingHorizontal: 24,
     paddingTop: height * 0.20, // Logo mavi ve beyaz arasında görünsün
@@ -1051,6 +1092,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  // Settings button
+  settingsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: 'rgba(30, 136, 229, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(30, 136, 229, 0.3)',
+  },
+  settingsButtonText: {
+    color: theme.colors.primary,
+    fontSize: 16,
+    fontWeight: '600',
   },
   // Security badge
   securityBadge: {

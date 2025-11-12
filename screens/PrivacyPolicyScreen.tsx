@@ -167,7 +167,7 @@ export default function PrivacyPolicyScreen() {
             If you have any questions or concerns about this Privacy Policy or our data practices, please contact us at:
           </Text>
           <Text style={[styles.contactInfo, { color: paperTheme.colors.onSurface }]}>
-            Email: support@imajstone.com
+            Email: support@claudra.com
           </Text>
         </View>
 

@@ -66,7 +66,7 @@ export default function ConsumptionScreen() {
   const [widgets, setWidgets] = useState<ConsumptionWidget[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTimeFilter, setSelectedTimeFilter] = useState<'month' | 'year'>('month');
+  const [selectedTimeFilters, setSelectedTimeFilters] = useState<Map<string, 'month' | 'year'>>(new Map());
   const [widgetMonthlyData, setWidgetMonthlyData] = useState<Map<string, any>>(new Map());
   const [widgetYearlyData, setWidgetYearlyData] = useState<Map<string, any>>(new Map());
   const [liveValues, setLiveValues] = useState<Map<string, number>>(new Map());
@@ -116,9 +116,11 @@ export default function ConsumptionScreen() {
     const activeCallbacks = new Map<string, (value: any) => void>();
     const activeSubscriptions = new Map<string, any>();
     
-    if (wsConnected && selectedTimeFilter === 'month') {
+    if (wsConnected) {
       widgets.forEach(widget => {
-        if (widget.trendLogId && widgetMonthlyData.has(widget._id)) {
+        // Only watch if this widget has month filter selected
+        const widgetFilter = selectedTimeFilters.get(widget._id) || 'month';
+        if (widgetFilter === 'month' && widget.trendLogId && widgetMonthlyData.has(widget._id)) {
           const data = widgetMonthlyData.get(widget._id);
           if (data?.registerDetails) {
             const register = data.registerDetails;
@@ -164,10 +166,11 @@ export default function ConsumptionScreen() {
       });
       setLiveValues(new Map());
     };
-  }, [wsConnected, widgets, widgetMonthlyData, selectedTimeFilter, watchRegister, unwatchRegister]);
+  }, [wsConnected, widgets, widgetMonthlyData, selectedTimeFilters, watchRegister, unwatchRegister]);
 
   const loadWidgets = async () => {
     try {
+      // Consumption widgets ve registers'i paralel çek (eğer registers gerekiyorsa)
       const data = await ApiService.getConsumptionWidgets();
       
       // Kayıtlı widget sıralamasını kontrol et
@@ -240,38 +243,73 @@ export default function ConsumptionScreen() {
     const monthlyDataMap = new Map<string, any>();
     const yearlyDataMap = new Map<string, any>();
     
-    // First, get all registers to find register details
-    const registers = await ApiService.getRegisters();
+    // Get all trend log IDs
+    const trendLogIds = widgetsList
+      .filter(widget => widget.trendLogId)
+      .map(widget => widget.trendLogId!);
     
-    for (const widget of widgetsList) {
-      if (widget.trendLogId) {
-        try {
-          // Load monthly data
-          const monthlyData = await ApiService.getTrendLogComparison(widget.trendLogId, 'month');
-          if (monthlyData && monthlyData.success) {
+    if (trendLogIds.length === 0) {
+      return;
+    }
+
+    try {
+      // Get registers and comparisons in parallel
+      const [registers, comparisonsResult] = await Promise.all([
+        ApiService.getRegisters(),
+        ApiService.getConsumptionWidgetComparisons(trendLogIds)
+      ]);
+      
+      if (comparisonsResult.success && comparisonsResult.data) {
+        // Process each result
+        comparisonsResult.data.forEach((result: any) => {
+          if (!result.success) {
+            console.error(`Error loading data for trend log ${result.trendLogId}:`, result.error);
+            return;
+          }
+
+          // Find the widget that matches this trend log
+          const widget = widgetsList.find(w => w.trendLogId === result.trendLogId);
+          if (!widget) {
+            return;
+          }
+
+          // Process monthly data
+          if (result.monthly) {
+            const monthlyData: any = {
+              success: true,
+              comparison: result.monthly,
+              monthlyData: null,
+              trendLog: result.trendLog
+            };
+
             // Find the actual register details
-            if (monthlyData.trendLog?.registerId) {
-              const register = registers.find(r => r._id === monthlyData.trendLog.registerId);
+            if (result.trendLog?.registerId) {
+              const register = registers.find(r => r._id === result.trendLog.registerId);
               if (register) {
                 monthlyData.registerDetails = register;
               }
             }
+
             monthlyDataMap.set(widget._id, monthlyData);
-          } else if (monthlyData && !monthlyData.success) {
-            console.error(`Error loading monthly data for widget ${widget._id}:`, monthlyData.error);
           }
 
-          // Load yearly data
-          const yearlyData = await ApiService.getTrendLogComparison(widget.trendLogId, 'year');
-          if (yearlyData && yearlyData.success) {
+          // Process yearly data
+          if (result.yearly) {
+            const yearlyData = {
+              success: true,
+              comparison: result.yearly.comparison,
+              monthlyData: result.yearly.monthlyData,
+              trendLog: result.trendLog
+            };
+
             yearlyDataMap.set(widget._id, yearlyData);
-          } else if (yearlyData && !yearlyData.success) {
-            console.error(`Error loading yearly data for widget ${widget._id}:`, yearlyData.error);
           }
-        } catch (error) {
-          console.error(`Error loading data for widget ${widget._id}:`, error);
-        }
+        });
+      } else {
+        console.error('Failed to load consumption widget comparisons:', comparisonsResult.error);
       }
+    } catch (error) {
+      console.error('Error loading all widget data:', error);
     }
     
     setWidgetMonthlyData(monthlyDataMap);
@@ -293,11 +331,21 @@ export default function ConsumptionScreen() {
     setIsRefreshing(false);
   };
 
-  const handleTimeFilterChange = (filter: 'month' | 'year') => {
-    if (filter === selectedTimeFilter) return;
+  const handleTimeFilterChange = (widgetId: string, filter: 'month' | 'year') => {
+    const currentFilter = selectedTimeFilters.get(widgetId) || 'month';
+    if (filter === currentFilter) return;
     
-    // Simply change the filter, data is already loaded
-    setSelectedTimeFilter(filter);
+    // Update filter for this specific widget
+    setSelectedTimeFilters(prev => {
+      const newMap = new Map(prev);
+      newMap.set(widgetId, filter);
+      return newMap;
+    });
+  };
+  
+  // Get filter for a specific widget (defaults to 'month')
+  const getWidgetFilter = (widgetId: string): 'month' | 'year' => {
+    return selectedTimeFilters.get(widgetId) || 'month';
   };
   
   // Widget sürükleme başladığında çağrılır
@@ -354,9 +402,10 @@ export default function ConsumptionScreen() {
     }
   };
 
-  const formatDate = (date: Date | string): string => {
+  const formatDate = (date: Date | string, widgetId: string): string => {
     const d = new Date(date);
-    if (selectedTimeFilter === 'month') {
+    const filter = getWidgetFilter(widgetId);
+    if (filter === 'month') {
       return d.toLocaleDateString('en-US', { month: 'long' });
     } else {
       return d.toLocaleDateString('en-US', { year: 'numeric' });
@@ -364,8 +413,11 @@ export default function ConsumptionScreen() {
   };
 
   const renderConsumptionWidget = ({ item, index }: { item: ConsumptionWidget, index: number }) => {
+    // Get filter for this specific widget
+    const widgetFilter = getWidgetFilter(item._id);
+    
     // Get data based on selected filter
-    const data = selectedTimeFilter === 'month'
+    const data = widgetFilter === 'month'
       ? widgetMonthlyData.get(item._id)
       : widgetYearlyData.get(item._id);
     const liveValue = liveValues.get(item._id);
@@ -398,13 +450,13 @@ export default function ConsumptionScreen() {
     const monthlyData = data.monthlyData;
     
     // Update current value with live value if available
-    const currentValue = liveValue !== undefined && selectedTimeFilter === 'month' 
+    const currentValue = liveValue !== undefined && widgetFilter === 'month' 
       ? liveValue 
       : comparison.currentValue;
     
     // Recalculate percentage if using live value
     let percentageChange = comparison.percentageChange ?? 0;
-    if (liveValue !== undefined && selectedTimeFilter === 'month' && comparison.previousValue) {
+    if (liveValue !== undefined && widgetFilter === 'month' && comparison.previousValue) {
       percentageChange = ((liveValue - comparison.previousValue) / comparison.previousValue) * 100;
     }
 
@@ -441,7 +493,7 @@ export default function ConsumptionScreen() {
                   <Text style={styles.widgetTitle}>{item.title}</Text>
                   <View style={styles.changeIndicator}>
                     <Text style={styles.changeLabel}>
-                      {selectedTimeFilter === 'month' ? 'Monthly' : 'Yearly'} Change
+                      {widgetFilter === 'month' ? 'Monthly' : 'Yearly'} Change
                     </Text>
                     <Text style={[
                       styles.changeValue,
@@ -458,13 +510,13 @@ export default function ConsumptionScreen() {
                 <TouchableOpacity
                   style={[
                     styles.filterButton,
-                    selectedTimeFilter === 'month' && styles.filterButtonActive
+                    widgetFilter === 'month' && styles.filterButtonActive
                   ]}
-                  onPress={() => handleTimeFilterChange('month')}
+                  onPress={() => handleTimeFilterChange(item._id, 'month')}
                 >
                   <Text style={[
                     styles.filterText,
-                    selectedTimeFilter === 'month' && styles.filterTextActive
+                    widgetFilter === 'month' && styles.filterTextActive
                   ]}>
                     Monthly
                   </Text>
@@ -472,13 +524,13 @@ export default function ConsumptionScreen() {
                 <TouchableOpacity
                   style={[
                     styles.filterButton,
-                    selectedTimeFilter === 'year' && styles.filterButtonActive
+                    widgetFilter === 'year' && styles.filterButtonActive
                   ]}
-                  onPress={() => handleTimeFilterChange('year')}
+                  onPress={() => handleTimeFilterChange(item._id, 'year')}
                 >
                   <Text style={[
                     styles.filterText,
-                    selectedTimeFilter === 'year' && styles.filterTextActive
+                    widgetFilter === 'year' && styles.filterTextActive
                   ]}>
                     Yearly
                   </Text>
@@ -486,7 +538,7 @@ export default function ConsumptionScreen() {
               </View>
 
               {/* Chart Area */}
-              {selectedTimeFilter === 'month' ? (
+              {widgetFilter === 'month' ? (
                 // Monthly comparison bars
                 <View style={styles.chartContainer}>
                   <View style={styles.barChart}>
@@ -514,7 +566,7 @@ export default function ConsumptionScreen() {
                               height: prevBarHeight
                             }]} />
                             <Text style={styles.barLabel}>
-                              {formatDate(comparison.previousTimestamp)}
+                              {formatDate(comparison.previousTimestamp, item._id)}
                             </Text>
                           </View>
                           
@@ -526,7 +578,7 @@ export default function ConsumptionScreen() {
                               height: currBarHeight
                             }]} />
                             <Text style={styles.barLabel}>
-                              {formatDate(comparison.currentTimestamp)}
+                              {formatDate(comparison.currentTimestamp, item._id)}
                             </Text>
                           </View>
                         </>
@@ -536,7 +588,7 @@ export default function ConsumptionScreen() {
                 </View>
               ) : (
                 // Yearly view - show 12 months comparison
-                selectedTimeFilter === 'year' && (
+                widgetFilter === 'year' && (
                   <View style={styles.yearlyContainer}>
                     {monthlyData ? (
                       <>

@@ -88,6 +88,8 @@ class ApiService {
   private settings: ServerSettings | null = null;
   private useCloudBridge: boolean = false;
   private selectedAgentId: string | null = null;
+  private isInitialized: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
 
   // Demo modu kontrolü
   private async isDemoMode(): Promise<boolean> {
@@ -99,7 +101,26 @@ class ApiService {
     }
   }
  
-  async initialize(preserveAgentId: boolean = true) {
+  async initialize(preserveAgentId: boolean = true, force: boolean = false): Promise<void> {
+    // Eğer zaten initialize edilmişse ve force değilse, mevcut promise'i dön
+    if (this.isInitialized && !force && this.initializationPromise) {
+      return this.initializationPromise;
+    }
+    
+    // Eğer zaten bir initialization devam ediyorsa, onu bekle
+    if (this.initializationPromise && !force) {
+      return this.initializationPromise;
+    }
+    
+    // Yeni initialization promise oluştur
+    this.initializationPromise = this._doInitialize(preserveAgentId).then(() => {
+      this.isInitialized = true;
+    });
+    
+    return this.initializationPromise;
+  }
+  
+  private async _doInitialize(preserveAgentId: boolean = true) {
     console.log('[ApiService] Initializing service');
     
     // Store the current agentId if we want to preserve it
@@ -188,7 +209,9 @@ class ApiService {
     
     // Force re-initialization if agent changed
     if (isChanging) {
-      await this.initialize();
+      this.isInitialized = false; // Reset initialization flag
+      this.initializationPromise = null; // Clear existing promise
+      await this.initialize(true, true); // Force re-initialization
       console.log(`[ApiService] Reinitialized service for new agent: ${agentId}`);
       
       // Signal to the app that the agent has changed
@@ -318,8 +341,16 @@ class ApiService {
         console.log(`Raw JSON size: ${(rawSize / 1024).toFixed(2)} KB`);
         console.log(`Compression ratio: ${compressionRatio}%`);
       } else {
+        // Cloud Bridge üzerinden gelen response'larda Content-Length olmayabilir
+        // Ancak response zaten compressed (br encoding görüyoruz)
+        // Bu durumda sadece raw size göster, compression bilgisini de belirt
         console.log(`Raw JSON size: ${(rawSize / 1024).toFixed(2)} KB`);
-        console.log(`Compressed size: Not available (streaming response)`);
+        if (contentEncoding) {
+          console.log(`Compressed size: Not available (response is ${contentEncoding} encoded but Content-Length header missing)`);
+          console.log(`Note: Response is compressed by server, but size info not available via Cloud Bridge`);
+        } else {
+          console.log(`Compressed size: Not available (streaming response)`);
+        }
       }
       
       return jsonData;
@@ -1034,6 +1065,42 @@ class ApiService {
       if (this.useCloudBridge) {
         // Cloud Bridge üzerinden istek yap
         data = await this.fetchViaCloudBridge('/consumption-widgets');
+        
+        // Consumption widget verileri için boyut bilgilerini logla (trend log entries ve billing gibi)
+        if (data && data.success && data.widgets && Array.isArray(data.widgets)) {
+          const widgetCount = data.widgets.length;
+          const dataFormat = data.dataFormat || 'standard';
+          console.log(`[CONSUMPTION-WIDGET] Received ${widgetCount} widgets (format: ${dataFormat})`);
+          
+          // Veri boyutu hesaplamaları
+          const rawDataSize = JSON.stringify(data.widgets).length;
+          console.log(`[CONSUMPTION-WIDGET] Raw data size: ${(rawDataSize / 1024).toFixed(2)} KB`);
+          
+          if (dataFormat === 'compact') {
+            // Tahmini eski format boyutu (her widget için ortalama 300 byte)
+            const estimatedOldSize = widgetCount * 300;
+            const compressionRatio = ((1 - rawDataSize / estimatedOldSize) * 100).toFixed(2);
+            
+            console.log(`[CONSUMPTION-WIDGET] Estimated old format: ${(estimatedOldSize / 1024).toFixed(2)} KB`);
+            console.log(`[CONSUMPTION-WIDGET] Compression ratio: ${compressionRatio}%`);
+          }
+          
+          // Compact format'tan normal formata dönüştür (eğer compact ise)
+          if (dataFormat === 'compact' && data.widgets) {
+            const expandedWidgets = data.widgets.map((widget: any) => ({
+              _id: widget._id,
+              title: widget.t,
+              trendLogId: widget.tlid,
+              size: widget.s,
+              appearance: widget.a,
+              createdAt: widget.ct ? new Date(widget.ct).toISOString() : null,
+              updatedAt: widget.ut ? new Date(widget.ut).toISOString() : null
+            }));
+            
+            console.log(`Loaded ${expandedWidgets.length} consumption widgets`);
+            return expandedWidgets;
+          }
+        }
       } else {
         // Doğrudan SCADA API'sine istek yap
         const response = await fetch(`${this.baseUrl}/api/mobile/consumption-widgets`, {
@@ -1053,6 +1120,42 @@ class ApiService {
       if (!data.success || !data.widgets) {
         console.warn('No consumption widgets found in response:', data);
         return [];
+      }
+      
+      // Consumption widget verileri için boyut bilgilerini logla (trend log entries ve billing gibi)
+      if (data.widgets && Array.isArray(data.widgets)) {
+        const widgetCount = data.widgets.length;
+        const dataFormat = data.dataFormat || 'standard';
+        console.log(`[CONSUMPTION-WIDGET] Received ${widgetCount} widgets (format: ${dataFormat})`);
+        
+        // Veri boyutu hesaplamaları
+        const rawDataSize = JSON.stringify(data.widgets).length;
+        console.log(`[CONSUMPTION-WIDGET] Raw data size: ${(rawDataSize / 1024).toFixed(2)} KB`);
+        
+        if (dataFormat === 'compact') {
+          // Tahmini eski format boyutu (her widget için ortalama 300 byte)
+          const estimatedOldSize = widgetCount * 300;
+          const compressionRatio = ((1 - rawDataSize / estimatedOldSize) * 100).toFixed(2);
+          
+          console.log(`[CONSUMPTION-WIDGET] Estimated old format: ${(estimatedOldSize / 1024).toFixed(2)} KB`);
+          console.log(`[CONSUMPTION-WIDGET] Compression ratio: ${compressionRatio}%`);
+        }
+      }
+      
+      // Compact format'tan normal formata dönüştür (eğer compact ise)
+      if (data.dataFormat === 'compact' && data.widgets) {
+        const expandedWidgets = data.widgets.map((widget: any) => ({
+          _id: widget._id,
+          title: widget.t,
+          trendLogId: widget.tlid,
+          size: widget.s,
+          appearance: widget.a,
+          createdAt: widget.ct ? new Date(widget.ct).toISOString() : null,
+          updatedAt: widget.ut ? new Date(widget.ut).toISOString() : null
+        }));
+        
+        console.log(`Loaded ${expandedWidgets.length} consumption widgets`);
+        return expandedWidgets;
       }
       
       console.log(`Loaded ${data.widgets.length} consumption widgets`);
@@ -1166,7 +1269,66 @@ class ApiService {
       if (this.useCloudBridge) {
         // Cloud Bridge üzerinden istek yap - mobile comparison endpoint'ini kullan
         const path = `/trend-logs/${trendLogId}/comparison?timeFilter=${timeFilter}`;
-        return await this.fetchViaCloudBridge(path);
+        const data = await this.fetchViaCloudBridge(path);
+        
+        // Trend log comparison verileri için boyut bilgilerini logla
+        if (data && data.success) {
+          const dataFormat = data.dataFormat || 'standard';
+          console.log(`[TREND-LOG-COMPARISON] Received comparison data (format: ${dataFormat})`);
+          
+          // Veri boyutu hesaplamaları
+          const rawDataSize = JSON.stringify(data).length;
+          console.log(`[TREND-LOG-COMPARISON] Raw data size: ${(rawDataSize / 1024).toFixed(2)} KB`);
+          
+          if (dataFormat === 'compact') {
+            // Tahmini eski format boyutu (comparison + monthlyData + trendLog için ortalama 2 KB)
+            const estimatedOldSize = 2048;
+            const compressionRatio = ((1 - rawDataSize / estimatedOldSize) * 100).toFixed(2);
+            
+            console.log(`[TREND-LOG-COMPARISON] Estimated old format: ${(estimatedOldSize / 1024).toFixed(2)} KB`);
+            console.log(`[TREND-LOG-COMPARISON] Compression ratio: ${compressionRatio}%`);
+          }
+          
+          // Compact format'tan normal formata dönüştür (eğer compact ise)
+          if (dataFormat === 'compact') {
+            const expandedData = {
+              success: data.success,
+              comparison: data.c ? {
+                previousValue: data.c.pv,
+                currentValue: data.c.cv,
+                previousTimestamp: typeof data.c.pt === 'number' ? new Date(data.c.pt) : data.c.pt,
+                currentTimestamp: typeof data.c.ct === 'number' ? new Date(data.c.ct) : data.c.ct,
+                percentageChange: data.c.pc,
+                timeFilter: data.c.tf
+              } : null,
+              monthlyData: data.md ? {
+                currentYear: data.md.cy.map((m: any) => ({
+                  month: m.m,
+                  value: m.v,
+                  timestamp: typeof m.t === 'number' ? new Date(m.t) : m.t
+                })),
+                previousYear: data.md.py.map((m: any) => ({
+                  month: m.m,
+                  value: m.v,
+                  timestamp: typeof m.t === 'number' ? new Date(m.t) : m.t
+                })),
+                currentYearLabel: data.md.cyl,
+                previousYearLabel: data.md.pyl
+              } : null,
+              trendLog: data.tl ? {
+                _id: data.tl._id,
+                registerId: data.tl.rid,
+                analyzerId: data.tl.aid,
+                period: data.tl.p,
+                interval: data.tl.i
+              } : null
+            };
+            
+            return expandedData;
+          }
+        }
+        
+        return data;
       } else {
         // Doğrudan SCADA API'sine istek yap - mobile comparison endpoint'ini kullan
         const url = `${this.baseUrl}/api/mobile/trend-logs/${trendLogId}/comparison?timeFilter=${timeFilter}`;
@@ -1183,11 +1345,215 @@ class ApiService {
         }
 
         const data = await response.json();
+        
+        // Trend log comparison verileri için boyut bilgilerini logla
+        if (data && data.success) {
+          const dataFormat = data.dataFormat || 'standard';
+          console.log(`[TREND-LOG-COMPARISON] Received comparison data (format: ${dataFormat})`);
+          
+          // Veri boyutu hesaplamaları
+          const rawDataSize = JSON.stringify(data).length;
+          console.log(`[TREND-LOG-COMPARISON] Raw data size: ${(rawDataSize / 1024).toFixed(2)} KB`);
+          
+          if (dataFormat === 'compact') {
+            // Tahmini eski format boyutu (comparison + monthlyData + trendLog için ortalama 2 KB)
+            const estimatedOldSize = 2048;
+            const compressionRatio = ((1 - rawDataSize / estimatedOldSize) * 100).toFixed(2);
+            
+            console.log(`[TREND-LOG-COMPARISON] Estimated old format: ${(estimatedOldSize / 1024).toFixed(2)} KB`);
+            console.log(`[TREND-LOG-COMPARISON] Compression ratio: ${compressionRatio}%`);
+          }
+          
+          // Compact format'tan normal formata dönüştür (eğer compact ise)
+          if (dataFormat === 'compact') {
+            const expandedData = {
+              success: data.success,
+              comparison: data.c ? {
+                previousValue: data.c.pv,
+                currentValue: data.c.cv,
+                previousTimestamp: typeof data.c.pt === 'number' ? new Date(data.c.pt) : data.c.pt,
+                currentTimestamp: typeof data.c.ct === 'number' ? new Date(data.c.ct) : data.c.ct,
+                percentageChange: data.c.pc,
+                timeFilter: data.c.tf
+              } : null,
+              monthlyData: data.md ? {
+                currentYear: data.md.cy.map((m: any) => ({
+                  month: m.m,
+                  value: m.v,
+                  timestamp: typeof m.t === 'number' ? new Date(m.t) : m.t
+                })),
+                previousYear: data.md.py.map((m: any) => ({
+                  month: m.m,
+                  value: m.v,
+                  timestamp: typeof m.t === 'number' ? new Date(m.t) : m.t
+                })),
+                currentYearLabel: data.md.cyl,
+                previousYearLabel: data.md.pyl
+              } : null,
+              trendLog: data.tl ? {
+                _id: data.tl._id,
+                registerId: data.tl.rid,
+                analyzerId: data.tl.aid,
+                period: data.tl.p,
+                interval: data.tl.i
+              } : null
+            };
+            
+            return expandedData;
+          }
+        }
+        
         return data;
       }
     } catch (error) {
       console.error('Error fetching trend log comparison:', error);
       return null;
+    }
+  }
+
+  // Tüm consumption widget'lar için comparison verilerini tek seferde getirir
+  async getConsumptionWidgetComparisons(trendLogIds: string[]): Promise<any> {
+    try {
+      // Demo modu kontrolü
+      if (await this.isDemoMode()) {
+        console.log('[ApiService] Demo mode: returning demo consumption widget comparisons');
+        // Demo data döndür
+        return {
+          success: true,
+          data: trendLogIds.map(id => ({
+            trendLogId: id,
+            success: true,
+            monthly: {
+              previousValue: 850.5,
+              currentValue: 920.3,
+              previousTimestamp: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+              currentTimestamp: new Date(),
+              percentageChange: 8.2,
+              timeFilter: 'month'
+            },
+            yearly: {
+              comparison: {
+                previousValue: 10250.5,
+                currentValue: 11280.3,
+                previousTimestamp: new Date(new Date().getFullYear() - 1, 0, 1),
+                currentTimestamp: new Date(new Date().getFullYear(), 0, 1),
+                percentageChange: 10.0,
+                timeFilter: 'year'
+              },
+              monthlyData: null
+            },
+            trendLog: {
+              _id: id,
+              registerId: 'demo-register-1',
+              analyzerId: 'demo-analyzer-1',
+              period: 'interval',
+              interval: 3600
+            }
+          }))
+        };
+      }
+
+      await this.initialize();
+      
+      let data;
+      
+      if (this.useCloudBridge) {
+        // Cloud Bridge üzerinden istek yap
+        data = await this.fetchViaCloudBridge('/consumption-widgets/comparisons', 'POST', { trendLogIds });
+      } else {
+        // Doğrudan SCADA API'sine istek yap
+        const response = await fetch(`${this.baseUrl}/api/mobile/consumption-widgets/comparisons`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ trendLogIds }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        data = await response.json();
+      }
+      
+      if (!data.success) {
+        console.warn('Failed to fetch consumption widget comparisons:', data.error);
+        return {
+          success: false,
+          error: data.error || 'Failed to fetch consumption widget comparisons'
+        };
+      }
+
+      // Compact format'tan normal formata dönüştür
+      if (data.dataFormat === 'compact' && data.data) {
+        const expandedData = data.data.map((item: any) => {
+          if (!item.s) {
+            return {
+              trendLogId: item.tid,
+              success: false,
+              error: item.e
+            };
+          }
+
+          return {
+            trendLogId: item.tid,
+            success: true,
+            monthly: item.m ? {
+              previousValue: item.m.pv,
+              currentValue: item.m.cv,
+              previousTimestamp: typeof item.m.pt === 'number' ? new Date(item.m.pt) : item.m.pt,
+              currentTimestamp: typeof item.m.ct === 'number' ? new Date(item.m.ct) : item.m.ct,
+              percentageChange: item.m.pc,
+              timeFilter: item.m.tf
+            } : null,
+            yearly: item.y ? {
+              comparison: item.y.c ? {
+                previousValue: item.y.c.pv,
+                currentValue: item.y.c.cv,
+                previousTimestamp: typeof item.y.c.pt === 'number' ? new Date(item.y.c.pt) : item.y.c.pt,
+                currentTimestamp: typeof item.y.c.ct === 'number' ? new Date(item.y.c.ct) : item.y.c.ct,
+                percentageChange: item.y.c.pc,
+                timeFilter: item.y.c.tf
+              } : null,
+              monthlyData: item.y.md ? {
+                currentYear: item.y.md.cy.map((m: any) => ({
+                  month: m.m,
+                  value: m.v,
+                  timestamp: typeof m.t === 'number' ? new Date(m.t) : m.t
+                })),
+                previousYear: item.y.md.py.map((m: any) => ({
+                  month: m.m,
+                  value: m.v,
+                  timestamp: typeof m.t === 'number' ? new Date(m.t) : m.t
+                })),
+                currentYearLabel: item.y.md.cyl,
+                previousYearLabel: item.y.md.pyl
+              } : null
+            } : null,
+            trendLog: item.tl ? {
+              _id: item.tl._id,
+              registerId: item.tl.rid,
+              analyzerId: item.tl.aid,
+              period: item.tl.p,
+              interval: item.tl.i
+            } : null
+          };
+        });
+
+        return {
+          success: true,
+          data: expandedData
+        };
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error fetching consumption widget comparisons:', error);
+      return {
+        success: false,
+        error: 'Failed to fetch consumption widget comparisons'
+      };
     }
   }
 
@@ -1247,6 +1613,63 @@ class ApiService {
       if (!data.success || !data.billings) {
         console.warn('No billings found in response:', data);
         return [];
+      }
+      
+      // Billing verileri için boyut bilgilerini logla (trend log entries gibi)
+      if (data.billings && Array.isArray(data.billings)) {
+        const billingCount = data.billings.length;
+        const dataFormat = data.dataFormat || 'standard';
+        console.log(`[BILLING] Received ${billingCount} billings (format: ${dataFormat})`);
+        
+        // Veri boyutu hesaplamaları
+        const rawDataSize = JSON.stringify(data.billings).length;
+        console.log(`[BILLING] Raw data size: ${(rawDataSize / 1024).toFixed(2)} KB`);
+        
+        if (dataFormat === 'compact') {
+          // Tahmini eski format boyutu (her billing için ortalama 500 byte, her trend log için 200 byte)
+          let estimatedOldSize = 0;
+          data.billings.forEach((billing: any) => {
+            estimatedOldSize += 500; // Base billing size
+            if (billing.tl && Array.isArray(billing.tl)) {
+              estimatedOldSize += billing.tl.length * 200; // Trend logs
+            }
+          });
+          const compressionRatio = ((1 - rawDataSize / estimatedOldSize) * 100).toFixed(2);
+          
+          console.log(`[BILLING] Estimated old format: ${(estimatedOldSize / 1024).toFixed(2)} KB`);
+          console.log(`[BILLING] Compression ratio: ${compressionRatio}%`);
+        }
+        
+        // Response'un content-encoding başlığını kontrol et (Cloud Bridge üzerinden geliyorsa)
+        // Cloud Bridge üzerinden gelen response'larda Content-Length header'ı olmayabilir
+        // Bu durumda sadece raw size gösterilir
+        if (this.useCloudBridge) {
+          console.log(`[BILLING] Data received via Cloud Bridge (compression handled by server)`);
+        }
+      }
+      
+      // Compact format'tan normal formata dönüştür (eğer compact ise)
+      if (data.dataFormat === 'compact' && data.billings) {
+        const expandedBillings = data.billings.map((billing: any) => ({
+          _id: billing._id,
+          name: billing.n,
+          price: billing.p,
+          currency: billing.c,
+          trendLogs: billing.tl.map((tl: any) => ({
+            id: tl.id,
+            analyzerId: tl.aid,
+            analyzerName: tl.an,
+            registerId: tl.rid,
+            firstValue: tl.fv,
+            currentValue: tl.cv
+          })),
+          startTime: billing.st ? new Date(billing.st).toISOString() : null,
+          createdAt: billing.ct ? new Date(billing.ct).toISOString() : null,
+          updatedAt: billing.ut ? new Date(billing.ut).toISOString() : null
+        }));
+        
+        console.log(`Loaded ${expandedBillings.length} billings`);
+        return expandedBillings;
       }
       
       console.log(`Loaded ${data.billings.length} billings`);
