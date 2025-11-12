@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Alert,
   Animated,
+  BackHandler,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -16,6 +17,7 @@ import {
   Platform,
   ScrollView
 } from 'react-native';
+import SwipeGestureRecognizer from 'react-native-swipe-gestures';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, Card, useTheme as usePaperTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,9 +31,10 @@ import ApiService, { RegisterData } from '../services/ApiService';
 
 interface RegistersScreenProps {
   isActive?: boolean;
+  onSelectedAnalyzerChange?: (analyzerName: string | null) => void;
 }
 
-export default function RegistersScreen({ isActive = true }: RegistersScreenProps) {
+export default function RegistersScreen({ isActive = true, onSelectedAnalyzerChange }: RegistersScreenProps) {
   const paperTheme = usePaperTheme();
   const { isDarkMode } = useAppTheme();
   const { isConnected } = useConnection();
@@ -82,6 +85,28 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       setIsLoading(false);
     }
   }, [isConnected, wsConnected]);
+
+  // Android back button handler
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (viewMode === 'registers' && selectedAnalyzerId) {
+          handleBackToAnalyzers();
+          return true;
+        }
+        return false;
+      });
+
+      return () => backHandler.remove();
+    }
+  }, [viewMode, selectedAnalyzerId]);
+
+  // Swipe gesture handlers
+  const onSwipeRight = useCallback(() => {
+    if (Platform.OS === 'ios' && viewMode === 'registers' && selectedAnalyzerId) {
+      handleBackToAnalyzers();
+    }
+  }, [viewMode, selectedAnalyzerId]);
   
   // Kullanıcıya analizörleri sürükleme özelliğini bildirmek için
   useEffect(() => {
@@ -495,6 +520,17 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
   }, [draggedRegisterIndex, registerOrder]);
 
   const handleAnalyzerSelect = (analyzerId: string) => {
+    // Analizör adını bul
+    const analyzerRegisters = groupedRegisters.get(analyzerId) || [];
+    const analyzerName = analyzerRegisters.length > 0 
+      ? analyzerRegisters[0].analyzerName || `Analyzer ${analyzerId}`
+      : `Analyzer ${analyzerId}`;
+    
+    // App.tsx'e seçili analizör adını bildir
+    if (onSelectedAnalyzerChange) {
+      onSelectedAnalyzerChange(analyzerName);
+    }
+    
     // Animate transition
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -536,6 +572,11 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
   };
 
   const handleBackToAnalyzers = () => {
+    // App.tsx'e seçili analizör olmadığını bildir
+    if (onSelectedAnalyzerChange) {
+      onSelectedAnalyzerChange(null);
+    }
+    
     // Animate transition
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -1232,57 +1273,31 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     ? selectedRegisters[0].analyzerName || `Analyzer ${selectedAnalyzerId}`
     : 'Unknown Analyzer';
 
+  const swipeConfig = {
+    velocityThreshold: 0.3,
+    directionalOffsetThreshold: 80,
+    gestureIsClickThreshold: 5,
+  };
+
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          backgroundColor: paperTheme.colors.background,
-          opacity: fadeAnim,
-          transform: [{ translateX: slideAnim }],
-        }
-      ]}
+    <SwipeGestureRecognizer
+      onSwipeRight={onSwipeRight}
+      config={swipeConfig}
+      style={{ flex: 1 }}
     >
-      <StatusBar style={isDarkMode ? "light" : "dark"} />
-      
-      {/* Modern Floating Header */}
-      <View style={[styles.modernHeader, { backgroundColor: 'rgba(33, 150, 243, 0.15)', height: 'auto' }]}>
-        <SafeAreaView edges={['top']} style={{ paddingTop: -48 }}>
-          <TouchableOpacity
-            style={[styles.headerContent, { paddingTop: 1, paddingBottom: 4 }]}
-            onPress={handleBackToAnalyzers}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.backButton, { backgroundColor: paperTheme.colors.primary }]}>
-              <MaterialCommunityIcons
-                name="arrow-left"
-                size={24}
-                color="white"
-              />
-            </View>
-            
-            <View style={styles.headerTextContainer}>
-              <Text style={[styles.headerTitle, { color: paperTheme.colors.primary }]}>
-                {selectedAnalyzerName}
-              </Text>
-              <Text style={[styles.headerSubtitle, { color: paperTheme.colors.onSurfaceVariant }]}>
-                {selectedRegisters.length} registers • {selectedRegisters[0]?.buildingName || 'Unknown Building'}
-              </Text>
-            </View>
-            
-            <View style={styles.headerActions}>
-              <View style={[styles.liveIndicatorHeader, { backgroundColor: 'rgba(244, 67, 54, 0.9)' }]}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveTextHeader}>
-                  {selectedRegisters.filter(reg => realTimeValues.has(reg._id)).length} LIVE
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </SafeAreaView>
-      </View>
-      
-      <FlatList
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            backgroundColor: paperTheme.colors.background,
+            opacity: fadeAnim,
+            transform: [{ translateX: slideAnim }],
+          }
+        ]}
+      >
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+        
+        <FlatList
         key={`registers-${isLandscape ? 'landscape' : 'portrait'}-${numColumns}`}
         data={selectedRegisters}
         renderItem={renderRegisterItem}
@@ -1326,7 +1341,8 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
         register={selectedRegister}
         onClose={() => setWriteModalVisible(false)}
       />
-    </Animated.View>
+      </Animated.View>
+    </SwipeGestureRecognizer>
   );
 }
 
@@ -1784,6 +1800,8 @@ const styles = StyleSheet.create({
   },
   headerTextContainer: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,

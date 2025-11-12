@@ -91,6 +91,9 @@ function MainApp() {
   const [agentName, setAgentName] = useState<string>('SCADA Mobile');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [showSessionExpiredModal, setShowSessionExpiredModal] = useState(false);
+  const [selectedAnalyzerName, setSelectedAnalyzerName] = useState<string | null>(null);
+  const [selectedLogsAnalyzerName, setSelectedLogsAnalyzerName] = useState<string | null>(null);
+  const [logEntryTitle, setLogEntryTitle] = useState<string | null>(null);
   
   // AppState tracking for session timeout
   const appStateRef = useRef(AppState.currentState);
@@ -799,6 +802,15 @@ function MainApp() {
     if (screenName === 'SignOut') {
       handleSignOut();
     } else {
+      // Ekran değiştiğinde seçili analizör adını temizle
+      if (screenName !== 'Registers') {
+        setSelectedAnalyzerName(null);
+      }
+      if (screenName !== 'Logs') {
+        setSelectedLogsAnalyzerName(null);
+        setLogEntryTitle(null);
+      }
+      
       // Animate screen transition
       Animated.sequence([
         Animated.parallel([
@@ -899,13 +911,23 @@ function MainApp() {
       case 'Home':
         return <HomeScreen />;
       case 'Registers':
-        return <RegistersScreen isActive={currentScreen === 'Registers'} />;
+        return (
+          <RegistersScreen 
+            isActive={currentScreen === 'Registers'} 
+            onSelectedAnalyzerChange={setSelectedAnalyzerName}
+          />
+        );
       case 'Consumption':
         return <ConsumptionScreen />;
       case 'Billing':
         return <BillingScreen />;
       case 'Logs':
-        return <LogsScreen />;
+        return (
+          <LogsScreen 
+            onSelectedAnalyzerChange={setSelectedLogsAnalyzerName}
+            onLogEntryTitleChange={setLogEntryTitle}
+          />
+        );
       case 'SystemLogs':
         return <SystemLogsScreen />;
       case 'PeriodicReports':
@@ -916,6 +938,18 @@ function MainApp() {
   };
 
   const getCurrentTitle = () => {
+    // Registers ekranında ve seçili analizör varsa, analizör adını göster
+    if (currentScreen === 'Registers' && selectedAnalyzerName) {
+      return selectedAnalyzerName;
+    }
+    // Logs ekranında log entry görünümündeyse, log entry title'ı göster
+    if (currentScreen === 'Logs' && logEntryTitle) {
+      return logEntryTitle;
+    }
+    // Logs ekranında ve seçili analizör varsa, analizör adını göster
+    if (currentScreen === 'Logs' && selectedLogsAnalyzerName) {
+      return selectedLogsAnalyzerName;
+    }
     return menuItems.find(item => item.name === currentScreen)?.title || 'Home';
   };
 

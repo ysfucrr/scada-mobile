@@ -1,15 +1,18 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
+  BackHandler,
   FlatList,
   Modal,
+  Platform,
   RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from 'react-native';
+import SwipeGestureRecognizer from 'react-native-swipe-gestures';
 import {
   ActivityIndicator,
   Button,
@@ -50,9 +53,10 @@ type CompactLogEntry = [number, number];
 interface LogEntriesScreenProps {
   trendLog: TrendLogData;
   onBack: () => void;
+  onTitleChange?: (title: string | null) => void;
 }
 
-export default function LogEntriesScreen({ trendLog, onBack }: LogEntriesScreenProps) {
+export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: LogEntriesScreenProps) {
   const { isConnected } = useConnection();
   const { theme, isDarkMode } = useAppTheme();
   const paperTheme = useTheme() as AppTheme;
@@ -61,6 +65,25 @@ export default function LogEntriesScreen({ trendLog, onBack }: LogEntriesScreenP
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+
+  // Android back button handler
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        onBack();
+        return true;
+      });
+
+      return () => backHandler.remove();
+    }
+  }, [onBack]);
+
+  // Swipe gesture handlers
+  const onSwipeRight = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      onBack();
+    }
+  }, [onBack]);
   
   // Dialog state
   const [errorDialogVisible, setErrorDialogVisible] = useState(false);
@@ -295,6 +318,21 @@ export default function LogEntriesScreen({ trendLog, onBack }: LogEntriesScreenP
     setEntries([]);
   };
 
+  // Update title when component mounts or trendLog changes
+  useEffect(() => {
+    if (onTitleChange) {
+      const title = `${trendLog.registerName} • ${trendLog.analyzerName}`;
+      onTitleChange(title);
+    }
+    
+    return () => {
+      // Cleanup: reset title when component unmounts
+      if (onTitleChange) {
+        onTitleChange(null);
+      }
+    };
+  }, [trendLog, onTitleChange]);
+
   // Auto-load today's data on mount
   useEffect(() => {
     const today = new Date();
@@ -359,49 +397,22 @@ export default function LogEntriesScreen({ trendLog, onBack }: LogEntriesScreenP
     loadTodayEntries();
   }, [trendLog._id]); // Only run once when component mounts
 
+  const swipeConfig = {
+    velocityThreshold: 0.3,
+    directionalOffsetThreshold: 80,
+    gestureIsClickThreshold: 5,
+  };
+
   return (
-    <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
-      <StatusBar style={isDarkMode ? "light" : "dark"} />
-      
-      {/* Modern Floating Header */}
-      <View style={[styles.modernHeader, { backgroundColor: 'rgba(33, 150, 243, 0.15)', height: 'auto' }]}>
-        <SafeAreaView edges={['top']} style={{ paddingTop: -48 }}>
-          <TouchableOpacity
-            style={[styles.headerContent, { paddingTop: 1, paddingBottom: 4 }]}
-            onPress={onBack}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.backButton, { backgroundColor: paperTheme.colors.primary }]}>
-              <MaterialCommunityIcons
-                name="arrow-left"
-                size={24}
-                color="white"
-              />
-            </View>
-            
-            <View style={styles.headerTextContainer}>
-              <Text style={[styles.headerTitle, { color: paperTheme.colors.primary }]}>
-                {trendLog.registerName}
-              </Text>
-              <Text style={[styles.headerSubtitle, { color: paperTheme.colors.onSurfaceVariant }]}>
-                {trendLog.analyzerName} • {trendLog.buildingName}
-              </Text>
-            </View>
-            
-            <View style={styles.headerActions}>
-              {entries.length > 0 && (
-                <View style={[styles.entriesCountBadge, { backgroundColor: paperTheme.colors.primaryContainer }]}>
-                  <Text style={[styles.entriesCountText, { color: paperTheme.colors.onPrimaryContainer }]}>
-                    {entries.length}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
-        </SafeAreaView>
-      </View>
-      
-      {/* Date Filter Section */}
+    <SwipeGestureRecognizer
+      onSwipeRight={onSwipeRight}
+      config={swipeConfig}
+      style={{ flex: 1 }}
+    >
+      <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+        
+        {/* Date Filter Section */}
       <Surface style={styles.filterSection} elevation={1}>
         <View style={styles.dateFilterRow}>
           <View style={styles.dateInputContainer}>
@@ -628,7 +639,8 @@ export default function LogEntriesScreen({ trendLog, onBack }: LogEntriesScreenP
           </Dialog.Actions>
         </Dialog>
       </Portal>
-    </View>
+      </View>
+    </SwipeGestureRecognizer>
   );
 }
 
@@ -768,6 +780,8 @@ const styles = StyleSheet.create({
   },
   headerTextContainer: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,

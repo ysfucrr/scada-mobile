@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Alert,
   Animated,
+  BackHandler,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -14,6 +15,7 @@ import {
   ToastAndroid,
   Platform
 } from 'react-native';
+import SwipeGestureRecognizer from 'react-native-swipe-gestures';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, useTheme as usePaperTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -51,7 +53,12 @@ export interface TrendLogData {
   updatedAt: string;
 }
 
-export default function LogsScreen() {
+interface LogsScreenProps {
+  onSelectedAnalyzerChange?: (analyzerName: string | null) => void;
+  onLogEntryTitleChange?: (title: string | null) => void;
+}
+
+export default function LogsScreen({ onSelectedAnalyzerChange, onLogEntryTitleChange }: LogsScreenProps) {
   const { isConnected } = useConnection();
   const { isDarkMode } = useAppTheme();
   const paperTheme = usePaperTheme();
@@ -81,6 +88,35 @@ export default function LogsScreen() {
       setIsLoading(false);
     }
   }, [isConnected]);
+
+  // Android back button handler
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (viewMode === 'entries' && selectedTrendLog) {
+          handleBackToLogs();
+          return true;
+        } else if (viewMode === 'logs' && selectedAnalyzerId) {
+          handleBackToAnalyzers();
+          return true;
+        }
+        return false;
+      });
+
+      return () => backHandler.remove();
+    }
+  }, [viewMode, selectedTrendLog, selectedAnalyzerId]);
+
+  // Swipe gesture handlers
+  const onSwipeRight = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      if (viewMode === 'entries' && selectedTrendLog) {
+        handleBackToLogs();
+      } else if (viewMode === 'logs' && selectedAnalyzerId) {
+        handleBackToAnalyzers();
+      }
+    }
+  }, [viewMode, selectedTrendLog, selectedAnalyzerId]);
   
   // Kullanıcıya analizörleri sürükleme özelliğini bildirmek için
   useEffect(() => {
@@ -193,6 +229,17 @@ export default function LogsScreen() {
   };
 
   const handleAnalyzerSelect = (analyzerId: string) => {
+    // Analizör adını bul
+    const analyzerLogs = groupedLogs.get(analyzerId) || [];
+    const analyzerName = analyzerLogs.length > 0
+      ? analyzerLogs[0].analyzerName || `Analyzer ${analyzerId}`
+      : `Analyzer ${analyzerId}`;
+    
+    // App.tsx'e seçili analizör adını bildir
+    if (onSelectedAnalyzerChange) {
+      onSelectedAnalyzerChange(analyzerName);
+    }
+    
     // Animate transition
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -232,6 +279,11 @@ export default function LogsScreen() {
   };
 
   const handleBackToAnalyzers = () => {
+    // App.tsx'e seçili analizör olmadığını bildir
+    if (onSelectedAnalyzerChange) {
+      onSelectedAnalyzerChange(null);
+    }
+    
     // Animate transition
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -272,6 +324,11 @@ export default function LogsScreen() {
   };
 
   const handleBackToLogs = () => {
+    // App.tsx'e log entry title'ı temizle
+    if (onLogEntryTitleChange) {
+      onLogEntryTitleChange(null);
+    }
+    
     // Animate transition
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -512,6 +569,7 @@ export default function LogsScreen() {
         <LogEntriesScreen
           trendLog={selectedTrendLog}
           onBack={handleBackToLogs}
+          onTitleChange={onLogEntryTitleChange}
         />
       </Animated.View>
     );
@@ -523,57 +581,31 @@ export default function LogsScreen() {
       ? selectedLogs[0].analyzerName || `Analyzer ${selectedAnalyzerId}`
       : 'Unknown Analyzer';
 
+    const swipeConfig = {
+      velocityThreshold: 0.3,
+      directionalOffsetThreshold: 80,
+      gestureIsClickThreshold: 5,
+    };
+
     return (
-      <Animated.View
-        style={[
-          styles.container,
-          {
-            backgroundColor: paperTheme.colors.background,
-            opacity: fadeAnim,
-            transform: [{ translateX: slideAnim }],
-          }
-        ]}
+      <SwipeGestureRecognizer
+        onSwipeRight={onSwipeRight}
+        config={swipeConfig}
+        style={{ flex: 1 }}
       >
-        <StatusBar style={isDarkMode ? "light" : "dark"} />
-        
-        {/* Modern Floating Header */}
-        <View style={[styles.modernHeader, { backgroundColor: 'rgba(33, 150, 243, 0.15)', height: 'auto' }]}>
-          <SafeAreaView edges={['top']} style={{ paddingTop: -48 }}>
-            <TouchableOpacity
-              style={[styles.headerContent, { paddingTop: 1, paddingBottom: 4 }]}
-              onPress={handleBackToAnalyzers}
-              activeOpacity={0.8}
-            >
-              <View style={[styles.backButton, { backgroundColor: paperTheme.colors.primary }]}>
-                <MaterialCommunityIcons
-                  name="arrow-left"
-                  size={24}
-                  color="white"
-                />
-              </View>
-              
-              <View style={styles.headerTextContainer}>
-                <Text style={[styles.headerTitle, { color: paperTheme.colors.primary }]}>
-                  {selectedAnalyzerName}
-                </Text>
-                <Text style={[styles.headerSubtitle, { color: paperTheme.colors.onSurfaceVariant }]}>
-                  {selectedLogs.length} logs • {selectedLogs[0]?.buildingName || 'Unknown Building'}
-                </Text>
-              </View>
-              
-              <View style={styles.headerActions}>
-                <View style={[styles.liveIndicatorHeader, { backgroundColor: 'rgba(76, 175, 80, 0.9)' }]}>
-                  <View style={styles.liveDot} />
-                  <Text style={styles.liveTextHeader}>
-                    {selectedLogs.filter(log => log.status === 'running').length} RUNNING
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          </SafeAreaView>
-        </View>
-        
-        <FlatList
+        <Animated.View
+          style={[
+            styles.container,
+            {
+              backgroundColor: paperTheme.colors.background,
+              opacity: fadeAnim,
+              transform: [{ translateX: slideAnim }],
+            }
+          ]}
+        >
+          <StatusBar style={isDarkMode ? "light" : "dark"} />
+          
+          <FlatList
           key={`logs-${isLandscape ? 'landscape' : 'portrait'}`}
           data={selectedLogs}
           renderItem={({ item }) => (
@@ -608,7 +640,8 @@ export default function LogsScreen() {
             </View>
           }
         />
-      </Animated.View>
+        </Animated.View>
+      </SwipeGestureRecognizer>
     );
   }
 
@@ -1021,6 +1054,8 @@ const styles = StyleSheet.create({
   },
   headerTextContainer: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 18,
