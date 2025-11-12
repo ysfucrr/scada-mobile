@@ -317,6 +317,14 @@ export default function LogsScreen() {
       );
     }
   }, []);
+
+  // Analizör seçimini kaldır (tek tıklama ile)
+  const handleAnalyzerPress = useCallback((index: number) => {
+    // Eğer bu analizör zaten seçiliyse, seçimi kaldır
+    if (draggedAnalyzerIndex === index) {
+      setDraggedAnalyzerIndex(undefined);
+    }
+  }, [draggedAnalyzerIndex]);
   
   // Analizör bırakıldığında çağrılır
   const handleAnalyzerDrop = useCallback(async (targetIndex: number) => {
@@ -325,8 +333,30 @@ export default function LogsScreen() {
       return;
     }
 
+    // Mevcut görüntülenen sıralamayı al (sortedAnalyzers mantığı ile tamamen aynı)
+    const currentSortedAnalyzers: string[] = [];
+    
+    // Önce kaydedilmiş sıralamaya göre ekle
+    analyzerOrder
+      .filter(id => groupedLogs.has(id))
+      .forEach(id => currentSortedAnalyzers.push(id));
+    
+    // Sıralama listesinde olmayan analizörleri ekle
+    Array.from(groupedLogs.keys()).forEach(id => {
+      if (!currentSortedAnalyzers.includes(id)) {
+        currentSortedAnalyzers.push(id);
+      }
+    });
+
+    // Index'lerin geçerli olduğundan emin ol
+    if (draggedAnalyzerIndex >= currentSortedAnalyzers.length || targetIndex >= currentSortedAnalyzers.length) {
+      console.error('Invalid index in handleAnalyzerDrop', { draggedAnalyzerIndex, targetIndex, length: currentSortedAnalyzers.length });
+      setDraggedAnalyzerIndex(undefined);
+      return;
+    }
+
     // Sürüklenen analizörün yeni konumunu hesaplama
-    const newOrder = [...analyzerOrder];
+    const newOrder = [...currentSortedAnalyzers];
     const [draggedItem] = newOrder.splice(draggedAnalyzerIndex, 1);
     newOrder.splice(targetIndex, 0, draggedItem);
     
@@ -342,7 +372,7 @@ export default function LogsScreen() {
     
     // Sürüklemeyi sonlandır
     setDraggedAnalyzerIndex(undefined);
-  }, [draggedAnalyzerIndex, analyzerOrder]);
+  }, [draggedAnalyzerIndex, analyzerOrder, groupedLogs]);
 
   const getAnalyzerStats = (analyzerId: string) => {
     const analyzerLogs = groupedLogs.get(analyzerId) || [];
@@ -508,15 +538,27 @@ export default function LogsScreen() {
     const firstLog = analyzerLogs[0];
     const stats = getAnalyzerStats(analyzerId);
     const isBeingDragged = draggedAnalyzerIndex === index;
+    const isSelected = draggedAnalyzerIndex === index;
+    const canDrop = draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index;
     const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
     
     return (
       <TouchableOpacity
         onLongPress={() => handleAnalyzerLongPress(index)}
-        onPress={draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index
-          ? () => handleAnalyzerDrop(index)
-          : () => handleAnalyzerSelect(analyzerId)
-        }
+        onPress={() => {
+          // Eğer bu analizör seçiliyse, seçimi kaldır
+          if (isSelected) {
+            handleAnalyzerPress(index);
+          } 
+          // Eğer başka bir analizör seçiliyse ve bu analizöre drop yapılabilirse, drop yap
+          else if (canDrop) {
+            handleAnalyzerDrop(index);
+          }
+          // Normal tıklama - analizörü seç
+          else {
+            handleAnalyzerSelect(analyzerId);
+          }
+        }}
         activeOpacity={0.9}
         delayLongPress={300}
       >
@@ -526,7 +568,7 @@ export default function LogsScreen() {
             style={{
               ...styles.analyzerCard,
               ...(isBeingDragged ? styles.beingDragged : {}),
-              ...(draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index ? styles.dropTarget : {})
+              ...(canDrop ? styles.dropTarget : {})
             }}
             mode="elevated"
           >
@@ -618,6 +660,7 @@ export default function LogsScreen() {
         data={sortedAnalyzers}
         renderItem={renderAnalyzerItem}
         keyExtractor={(item) => item[0]}
+        extraData={draggedAnalyzerIndex}
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl 

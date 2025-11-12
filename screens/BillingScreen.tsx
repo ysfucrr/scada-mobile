@@ -12,9 +12,12 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Dimensions
+  Dimensions,
+  Platform,
+  ToastAndroid
 } from 'react-native';
 import { ActivityIndicator, useTheme as usePaperTheme } from 'react-native-paper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
@@ -54,6 +57,8 @@ export default function BillingScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [expandedBilling, setExpandedBilling] = useState<string | null>(null);
   const [registerValues, setRegisterValues] = useState<Map<string, number>>(new Map());
+  const [draggedBillingIndex, setDraggedBillingIndex] = useState<number | undefined>(undefined);
+  const [billingOrder, setBillingOrder] = useState<string[]>([]);
   
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -149,7 +154,6 @@ export default function BillingScreen() {
     try {
       setIsLoading(true);
       const data = await ApiService.getBillings();
-      setBillings(data);
       
       // Initialize expand animations for each billing
       data.forEach(billing => {
@@ -157,6 +161,41 @@ export default function BillingScreen() {
           expandAnims.set(billing._id, new Animated.Value(0));
         }
       });
+      
+      // Kaydedilmiş billing sıralamasını kontrol et
+      try {
+        const savedOrder = await AsyncStorage.getItem('billing_order');
+        if (savedOrder) {
+          const orderIds = JSON.parse(savedOrder);
+          setBillingOrder(orderIds);
+          
+          // Sıralamaya göre billing'leri düzenle
+          const orderedBillings: BillingType[] = [];
+          orderIds.forEach((id: string) => {
+            const billing = data.find(b => b._id === id);
+            if (billing) {
+              orderedBillings.push(billing);
+            }
+          });
+          
+          // Sıralamada olmayan billing'leri ekle
+          data.forEach(billing => {
+            if (!orderIds.includes(billing._id)) {
+              orderedBillings.push(billing);
+            }
+          });
+          
+          setBillings(orderedBillings);
+        } else {
+          // İlk kez için varsayılan sıralama
+          setBillingOrder(data.map(b => b._id));
+          setBillings(data);
+        }
+      } catch (error) {
+        console.log('Billing sıralaması yüklenirken hata:', error);
+        setBillings(data);
+        setBillingOrder(data.map(b => b._id));
+      }
     } catch (error) {
       console.error('Error loading billings:', error);
       Alert.alert(
@@ -222,8 +261,65 @@ export default function BillingScreen() {
     })} ${currency}`;
   };
 
+  // Billing sürükleme başladığında çağrılır
+  const handleBillingLongPress = (index: number) => {
+    setDraggedBillingIndex(index);
+    
+    // Android cihazlarda bir bildirim göster
+    if (Platform.OS === 'android') {
+      ToastAndroid.showWithGravityAndOffset(
+        'Bırakmak istediğiniz konuma sürükleyin',
+        ToastAndroid.SHORT,
+        ToastAndroid.BOTTOM,
+        0,
+        100
+      );
+    }
+  };
+
+  // Billing seçimini kaldır (tek tıklama ile)
+  const handleBillingPress = (index: number) => {
+    // Eğer bu billing zaten seçiliyse, seçimi kaldır
+    if (draggedBillingIndex === index) {
+      setDraggedBillingIndex(undefined);
+    }
+  };
+
+  // Billing bırakıldığında çağrılır
+  const handleBillingDrop = async (targetIndex: number) => {
+    if (draggedBillingIndex === undefined || draggedBillingIndex === targetIndex) {
+      setDraggedBillingIndex(undefined);
+      return;
+    }
+
+    // Sürüklenen billing'in yeni konumunu hesaplama
+    const newBillings = [...billings];
+    const [draggedBilling] = newBillings.splice(draggedBillingIndex, 1);
+    newBillings.splice(targetIndex, 0, draggedBilling);
+    
+    // Yeni billing listesini güncelle
+    setBillings(newBillings);
+    
+    // Sıralama için ID listesini güncelle
+    const newOrder = newBillings.map(billing => billing._id);
+    setBillingOrder(newOrder);
+    
+    // Yeni sıralamayı kalıcı olarak kaydetme
+    try {
+      await AsyncStorage.setItem('billing_order', JSON.stringify(newOrder));
+    } catch (error) {
+      console.error('Billing sıralaması kaydedilirken hata:', error);
+    }
+    
+    // Sürüklemeyi sonlandırma
+    setDraggedBillingIndex(undefined);
+  };
+
   const renderBillingItem = ({ item: billing, index }: { item: BillingType; index: number }) => {
     const isExpanded = expandedBilling === billing._id;
+    const isBeingDragged = draggedBillingIndex === index;
+    const isSelected = draggedBillingIndex === index;
+    const canDrop = draggedBillingIndex !== undefined && draggedBillingIndex !== index;
     
     // Calculate totals
     let totalUsed = 0;
@@ -263,7 +359,30 @@ export default function BillingScreen() {
     });
 
     return (
-      <View style={styles.billingCardWrapper}>
+      <TouchableOpacity
+        onLongPress={() => handleBillingLongPress(index)}
+        onPress={() => {
+          // Eğer bu billing seçiliyse, seçimi kaldır
+          if (isSelected) {
+            handleBillingPress(index);
+          } 
+          // Eğer başka bir billing seçiliyse ve bu billing'e drop yapılabilirse, drop yap
+          else if (canDrop) {
+            handleBillingDrop(index);
+          }
+          // Normal tıklama - billing'i aç/kapat
+          else {
+            toggleBilling(billing._id);
+          }
+        }}
+        activeOpacity={0.9}
+        delayLongPress={300}
+      >
+      <View style={[
+        styles.billingCardWrapper,
+        isBeingDragged && styles.beingDragged,
+        canDrop && styles.dropTarget
+      ]}>
         <GradientCard
           colors={gradientColors}
           style={styles.billingCard}
@@ -275,11 +394,7 @@ export default function BillingScreen() {
             style={styles.blurContainer}
           >
             {/* Header */}
-            <TouchableOpacity
-              onPress={() => toggleBilling(billing._id)}
-              activeOpacity={0.9}
-              style={styles.billingHeader}
-            >
+            <View style={styles.billingHeader}>
               <View style={styles.headerLeft}>
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
                   <MaterialCommunityIcons
@@ -310,7 +425,7 @@ export default function BillingScreen() {
                   color="#FFFFFF"
                 />
               </Animated.View>
-            </TouchableOpacity>
+            </View>
 
             {/* Expanded Content */}
             <Animated.View
@@ -439,6 +554,7 @@ export default function BillingScreen() {
           </BlurView>
         </GradientCard>
       </View>
+      </TouchableOpacity>
     );
   };
 
@@ -514,6 +630,7 @@ export default function BillingScreen() {
             data={billings}
             keyExtractor={(item) => item._id}
             renderItem={renderBillingItem}
+            extraData={draggedBillingIndex}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
@@ -772,5 +889,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '500',
+  },
+  beingDragged: {
+    opacity: 0.85,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  dropTarget: {
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderStyle: 'dashed',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
 });

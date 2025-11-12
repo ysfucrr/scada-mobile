@@ -363,6 +363,14 @@ export default function ConsumptionScreen() {
       );
     }
   }, []);
+
+  // Widget seçimini kaldır (tek tıklama ile)
+  const handleWidgetPress = useCallback((index: number) => {
+    // Eğer bu widget zaten seçiliyse, seçimi kaldır
+    if (draggedWidgetIndex === index) {
+      setDraggedWidgetIndex(undefined);
+    }
+  }, [draggedWidgetIndex]);
   
   // Widget bırakıldığında çağrılır
   const handleWidgetDrop = useCallback(async (targetIndex: number) => {
@@ -482,10 +490,16 @@ export default function ConsumptionScreen() {
               {/* Header - Sadece bu kısmı sürüklenebilir yapıyoruz */}
               <TouchableOpacity
                 onLongPress={() => handleWidgetLongPress(index)}
-                onPress={draggedWidgetIndex !== undefined && draggedWidgetIndex !== index
-                  ? () => handleWidgetDrop(index)
-                  : undefined
-                }
+                onPress={() => {
+                  // Eğer bu widget seçiliyse, seçimi kaldır
+                  if (draggedWidgetIndex === index) {
+                    handleWidgetPress(index);
+                  } 
+                  // Eğer başka bir widget seçiliyse ve bu widget'a drop yapılabilirse, drop yap
+                  else if (draggedWidgetIndex !== undefined && draggedWidgetIndex !== index) {
+                    handleWidgetDrop(index);
+                  }
+                }}
                 activeOpacity={0.95}
                 delayLongPress={500}
               >

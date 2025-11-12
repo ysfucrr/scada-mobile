@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
@@ -325,6 +325,14 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
     setDraggedWidgetIndex(index);
   }, []);
 
+  // Widget seçimini kaldır (tek tıklama ile)
+  const handleWidgetPress = useCallback((index: number) => {
+    // Eğer bu widget zaten seçiliyse, seçimi kaldır
+    if (draggedWidgetIndex === index) {
+      setDraggedWidgetIndex(undefined);
+    }
+  }, [draggedWidgetIndex]);
+
   // Widget bırakıldığında çağrılır
   const handleWidgetDrop = useCallback(async (targetIndex: number) => {
     if (draggedWidgetIndex === undefined || draggedWidgetIndex === targetIndex) {
@@ -416,7 +424,27 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
               widget.registers && Array.isArray(widget.registers)
                 ? widget.registers.map((register: any) => {
                     const realTimeValue = widgetValues.get(register.id);
-                    const displayValue = realTimeValue !== undefined ? realTimeValue : (register.value || 'N/A');
+                    let displayValue = realTimeValue !== undefined ? realTimeValue : (register.value || 'N/A');
+                    
+                    // Boolean değerleri ON/OFF'e çevir
+                    if (displayValue !== 'N/A' && displayValue !== null && displayValue !== undefined) {
+                      const isBooleanType = register.dataType?.toUpperCase() === 'BOOL' || 
+                                            register.dataType?.toUpperCase() === 'BOOLEAN';
+                      
+                      const isBooleanValue = displayValue === 1 || displayValue === 0 || 
+                                             displayValue === true || displayValue === false ||
+                                             displayValue === '1' || displayValue === '0' ||
+                                             displayValue === 'true' || displayValue === 'false';
+                      
+                      if (isBooleanType || isBooleanValue) {
+                        if (displayValue === 1 || displayValue === true || displayValue === '1' || displayValue === 'true') {
+                          displayValue = 'ON';
+                        } else if (displayValue === 0 || displayValue === false || displayValue === '0' || displayValue === 'false') {
+                          displayValue = 'OFF';
+                        }
+                      }
+                    }
+                    
                     const isLive = realTimeValue !== undefined;
                     
                     return {
@@ -430,6 +458,7 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
                 : []
             }
             onLongPress={() => handleWidgetLongPress(index)}
+            onPress={() => handleWidgetPress(index)}
             isBeingDragged={draggedWidgetIndex === index}
             draggedIndex={draggedWidgetIndex}
             myIndex={index}
@@ -593,39 +622,51 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
       <StatusBar style={isDarkMode ? "light" : "dark"} />
 
       <View style={styles.tabContainer}>
-        <IconButton
-          icon="view-dashboard-outline"
-          iconColor={activeTab === 'overview' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant}
-          size={24}
+        <TouchableOpacity
+          style={styles.tabItem}
           onPress={() => setActiveTab('overview')}
-          mode={activeTab === 'overview' ? 'contained' : 'outlined'}
-          containerColor={activeTab === 'overview' ? paperTheme.colors.primaryContainer : undefined}
-          style={styles.tabButton}
-        />
-        <Text style={[
-          styles.tabLabel,
-          { color: activeTab === 'overview' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant }
-        ]}>
-          Overview
-        </Text>
+          activeOpacity={0.7}
+        >
+          <IconButton
+            icon="view-dashboard-outline"
+            iconColor={activeTab === 'overview' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant}
+            size={24}
+            onPress={() => setActiveTab('overview')}
+            mode={activeTab === 'overview' ? 'contained' : 'outlined'}
+            containerColor={activeTab === 'overview' ? paperTheme.colors.primaryContainer : undefined}
+            style={styles.tabButton}
+          />
+          <Text style={[
+            styles.tabLabel,
+            { color: activeTab === 'overview' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant }
+          ]}>
+            Overview
+          </Text>
+        </TouchableOpacity>
 
         <View style={styles.tabSpacer} />
 
-        <IconButton
-          icon="server"
-          iconColor={activeTab === 'system' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant}
-          size={24}
+        <TouchableOpacity
+          style={styles.tabItem}
           onPress={() => setActiveTab('system')}
-          mode={activeTab === 'system' ? 'contained' : 'outlined'}
-          containerColor={activeTab === 'system' ? paperTheme.colors.primaryContainer : undefined}
-          style={styles.tabButton}
-        />
-        <Text style={[
-          styles.tabLabel,
-          { color: activeTab === 'system' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant }
-        ]}>
-          System Health
-        </Text>
+          activeOpacity={0.7}
+        >
+          <IconButton
+            icon="server"
+            iconColor={activeTab === 'system' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant}
+            size={24}
+            onPress={() => setActiveTab('system')}
+            mode={activeTab === 'system' ? 'contained' : 'outlined'}
+            containerColor={activeTab === 'system' ? paperTheme.colors.primaryContainer : undefined}
+            style={styles.tabButton}
+          />
+          <Text style={[
+            styles.tabLabel,
+            { color: activeTab === 'system' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant }
+          ]}>
+            System Health
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Tab content with simple ScrollView */}
@@ -661,6 +702,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(128,128,128,0.2)',
+  },
+  tabItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   tabButton: {
     margin: 0,

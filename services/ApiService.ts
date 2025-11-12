@@ -29,6 +29,10 @@ export interface RegisterData {
   offset?: number;
   displayMode?: string;
   scaleUnit?: string;
+  controlType?: 'dropdown' | 'button' | 'numeric';
+  dropdownOptions?: Array<{label: string, value: number | string}>;
+  onValue?: number | string;
+  offValue?: number | string;
 }
 
 export interface AnalyzerData {
@@ -543,6 +547,10 @@ class ApiService {
         registerType: register.registerType,
         offset: register.offset,
         displayMode: register.displayMode,
+        controlType: register.controlType,
+        dropdownOptions: register.dropdownOptions,
+        onValue: register.onValue,
+        offValue: register.offValue,
       }));
       
       console.log(`Loaded ${formattedRegisters.length} registers from buildings`);

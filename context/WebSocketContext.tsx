@@ -179,12 +179,12 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
                 listenerMapRef.current = currentSubscriptions;
                 
                 // Then send watch requests to the new agent for each subscription
-                for (const [key, data] of currentSubscriptions.entries()) {
-                  if (data.callbacks.length > 0) {
+                Array.from(currentSubscriptions.entries()).forEach(([key, data]) => {
+                  if (data.callbacks.length > 0 && socketRef.current) {
                     console.log(`[SocketIO] Re-subscribing to: ${key} with new agent`);
                     socketRef.current.emit('watch-register', data.register);
                   }
-                }
+                });
               }
             }
           }
@@ -330,7 +330,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // Tüm abonelikleri yeniden gönder
-        for (const [key, data] of listenerMapRef.current.entries()) {
+        Array.from(listenerMapRef.current.entries()).forEach(([key, data]) => {
           if (data.callbacks.length > 0) {
             console.log(`[SocketIO] Resubscribing to: ${key} with agent: ${agentId || 'default'}`);
             // Explicit watch request with the register information
@@ -340,7 +340,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
               _agentId: agentId // This is just for logging, doesn't affect routing
             });
           }
-        }
+        });
       });
 
       newSocket.on('disconnect', async (reason) => {
@@ -600,28 +600,91 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       }
 
       const settings: ServerSettings = JSON.parse(savedSettings);
-      // Apple App Transport Security (ATS) gereği her zaman HTTPS kullan
       const protocol = 'https';
-      const apiUrl = `${protocol}://${settings.serverHost}:${settings.serverPort}`;
+      
+      // Cloud Bridge kontrolü - 443 portu için Cloud Bridge kullan
+      const useCloudBridge = settings.serverPort === '443';
+      
+      // Agent ID'yi al
+      const selectedAgentId = await AsyncStorage.getItem('selectedAgentId');
+      
+      let response: Response;
+      let jsonData: any;
 
-      const response = await fetch(`${apiUrl}/api/mobile/registers/write`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ registerId, value }),
-      });
+      if (useCloudBridge) {
+        // Cloud Bridge üzerinden istek yap
+        const url = `${protocol}://${settings.serverHost}:${settings.serverPort}/api/proxy`;
+        
+        const requestBody = {
+          method: 'POST',
+          path: '/api/mobile/registers/write',
+          body: { registerId, value },
+          targetAgentId: selectedAgentId || null
+        };
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to send write request');
+        console.log(`[WebSocketContext] Writing register via Cloud Bridge: ${url}`, requestBody);
+
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        // Response'un content type'ını kontrol et
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          // HTML veya başka bir format geldi, hata mesajını oku
+          const text = await response.text();
+          console.error('[WebSocketContext] Non-JSON response received from Cloud Bridge:', text.substring(0, 200));
+          throw new Error(`Server returned non-JSON response. Status: ${response.status}`);
+        }
+
+        // Response body'yi bir kere oku
+        jsonData = await response.json();
+      } else {
+        // Doğrudan API'ye istek yap
+        const apiUrl = `${protocol}://${settings.serverHost}:${settings.serverPort}`;
+        
+        console.log(`[WebSocketContext] Writing register directly: ${apiUrl}/api/mobile/registers/write`);
+
+        response = await fetch(`${apiUrl}/api/mobile/registers/write`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ registerId, value }),
+        });
+
+        // Response'un content type'ını kontrol et
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          // HTML veya başka bir format geldi, hata mesajını oku
+          const text = await response.text();
+          console.error('[WebSocketContext] Non-JSON response received:', text.substring(0, 200));
+          throw new Error(`Server returned non-JSON response. Status: ${response.status}`);
+        }
+
+        jsonData = await response.json();
       }
 
-      const result = await response.json();
-      return result;
+      if (!response.ok) {
+        const errorMessage = jsonData?.error || jsonData?.message || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      console.log('[WebSocketContext] Write register success:', jsonData);
+      return jsonData;
 
     } catch (error) {
       console.error('[WebSocketContext] Write Register Error:', error);
+      
+      // Daha açıklayıcı hata mesajı
+      if (error instanceof SyntaxError && error.message.includes('JSON')) {
+        throw new Error('Server returned invalid response. Please check your connection and try again.');
+      }
+      
       throw error;
     }
   }, []);
