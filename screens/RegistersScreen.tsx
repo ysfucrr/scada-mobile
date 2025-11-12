@@ -66,6 +66,8 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const breathingAnimAnalyzer = useRef(new Animated.Value(1)).current;
+  const breathingAnimRegister = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (isConnected) {
@@ -86,6 +88,66 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       showDragInfo();
     }
   }, [analyzerOrder.length, viewMode, isLoading]);
+
+  // Nefes alma animasyonu - analizör seçildiğinde başlat
+  useEffect(() => {
+    if (draggedAnalyzerIndex !== undefined && viewMode === 'analyzers') {
+      // Animasyonu başlat
+      const breathingAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(breathingAnimAnalyzer, {
+            toValue: 1.05,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(breathingAnimAnalyzer, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      breathingAnimation.start();
+
+      return () => {
+        breathingAnimation.stop();
+        breathingAnimAnalyzer.setValue(1);
+      };
+    } else {
+      // Animasyonu durdur ve değeri sıfırla
+      breathingAnimAnalyzer.setValue(1);
+    }
+  }, [draggedAnalyzerIndex, viewMode]);
+
+  // Nefes alma animasyonu - register seçildiğinde başlat
+  useEffect(() => {
+    if (draggedRegisterIndex !== undefined && viewMode === 'registers') {
+      // Animasyonu başlat
+      const breathingAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(breathingAnimRegister, {
+            toValue: 1.05,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(breathingAnimRegister, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      breathingAnimation.start();
+
+      return () => {
+        breathingAnimation.stop();
+        breathingAnimRegister.setValue(1);
+      };
+    } else {
+      // Animasyonu durdur ve değeri sıfırla
+      breathingAnimRegister.setValue(1);
+    }
+  }, [draggedRegisterIndex, viewMode]);
 
   // Register sıralamasını yükle - seçili analizör değiştiğinde
   useEffect(() => {
@@ -345,6 +407,14 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       );
     }
   }, []);
+
+  // Analizör seçimini kaldır (tek tıklama ile)
+  const handleAnalyzerPress = useCallback((index: number) => {
+    // Eğer bu analizör zaten seçiliyse, seçimi kaldır
+    if (draggedAnalyzerIndex === index) {
+      setDraggedAnalyzerIndex(undefined);
+    }
+  }, [draggedAnalyzerIndex]);
   
   // Analizör bırakıldığında çağrılır
   const handleAnalyzerDrop = useCallback(async (targetIndex: number) => {
@@ -387,6 +457,14 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
       );
     }
   }, []);
+
+  // Register seçimini kaldır (tek tıklama ile)
+  const handleRegisterPress = useCallback((index: number) => {
+    // Eğer bu register zaten seçiliyse, seçimi kaldır
+    if (draggedRegisterIndex === index) {
+      setDraggedRegisterIndex(undefined);
+    }
+  }, [draggedRegisterIndex]);
   
   // Register bırakıldığında çağrılır
   const handleRegisterDrop = useCallback(async (targetIndex: number) => {
@@ -515,16 +593,32 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     const isBeingDragged = draggedAnalyzerIndex === index;
     const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
     
+    // Seçili analizör için animasyonlu scale
+    const animatedStyle = draggedAnalyzerIndex === index
+      ? { transform: [{ scale: breathingAnimAnalyzer }] }
+      : {};
+    
     return (
-      <TouchableOpacity
-        onLongPress={() => handleAnalyzerLongPress(index)}
-        onPress={draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index
-          ? () => handleAnalyzerDrop(index)
-          : () => handleAnalyzerSelect(analyzerId)
-        }
-        activeOpacity={0.9}
-        delayLongPress={300}
-      >
+      <Animated.View style={animatedStyle}>
+        <TouchableOpacity
+          onLongPress={() => handleAnalyzerLongPress(index)}
+          onPress={() => {
+            // Eğer bu analizör seçiliyse, seçimi kaldır
+            if (draggedAnalyzerIndex === index) {
+              handleAnalyzerPress(index);
+            } 
+            // Eğer başka bir analizör seçiliyse ve bu analizöre drop yapılabilirse, drop yap
+            else if (draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index) {
+              handleAnalyzerDrop(index);
+            }
+            // Normal durumda analizörü seç
+            else {
+              handleAnalyzerSelect(analyzerId);
+            }
+          }}
+          activeOpacity={0.9}
+          delayLongPress={500}
+        >
         <View style={styles.cardWrapper}>
           <GradientCard
             colors={gradientColors}
@@ -590,8 +684,9 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
             </View>
           </BlurView>
         </GradientCard>
-      </View>
-    </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+      </Animated.View>
     );
   };
 
@@ -637,13 +732,28 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
     
     const statusColor = getStatusColor(item.status || 'inactive');
     
+    // Seçili register için animasyonlu scale
+    const animatedStyle = draggedRegisterIndex === index
+      ? { transform: [{ scale: breathingAnimRegister }] }
+      : {};
+    
     return (
-      <TouchableOpacity
-        onLongPress={() => handleRegisterLongPress(index)}
-        onPress={canDrop ? () => handleRegisterDrop(index) : undefined}
-        activeOpacity={0.9}
-        delayLongPress={300}
-      >
+      <Animated.View style={animatedStyle}>
+        <TouchableOpacity
+          onLongPress={() => handleRegisterLongPress(index)}
+          onPress={() => {
+            // Eğer bu register seçiliyse, seçimi kaldır
+            if (draggedRegisterIndex === index) {
+              handleRegisterPress(index);
+            } 
+            // Eğer başka bir register seçiliyse ve bu register'a drop yapılabilirse, drop yap
+            else if (draggedRegisterIndex !== undefined && draggedRegisterIndex !== index) {
+              handleRegisterDrop(index);
+            }
+          }}
+          activeOpacity={0.9}
+          delayLongPress={500}
+        >
         <View style={[styles.cardWrapper, isBeingDragged && styles.beingDragged, canDrop && styles.dropTarget]}>
           <Card
             style={styles.registerCard}
@@ -839,6 +949,7 @@ export default function RegistersScreen({ isActive = true }: RegistersScreenProp
         </Card>
       </View>
       </TouchableOpacity>
+      </Animated.View>
     );
   };
 
@@ -1050,7 +1161,6 @@ const showDragInfo = () => {
 
 const styles = StyleSheet.create({
   beingDragged: {
-    opacity: 0.85,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1059,7 +1169,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 20,
     elevation: 15,
-    transform: [{ scale: 1.05 }],
   },
   dropTarget: {
     borderWidth: 2,

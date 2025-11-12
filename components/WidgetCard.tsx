@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View, TouchableOpacity } from 'react-native';
+import { Animated, StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Chip, Text, useTheme } from 'react-native-paper';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { AppTheme } from '../theme/theme';
@@ -51,11 +51,7 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
   // Animations
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const cardTranslateY = useRef(new Animated.Value(30)).current;
-  const cardScale = useRef(new Animated.Value(1)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const borderGlowAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  const glowAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const breathingAnim = useRef(new Animated.Value(1)).current;
   
   useEffect(() => {
     // Card entrance animation
@@ -74,111 +70,33 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
     ]).start();
   }, []);
   
-  // Sürükleme animasyonları - Belirgin pulse ve glow efekti
+  // Nefes alma animasyonu - widget seçildiğinde başlat
   useEffect(() => {
     if (isBeingDragged) {
-      // Önceki animasyonları durdur
-      if (pulseAnimationRef.current) {
-        pulseAnimationRef.current.stop();
-        pulseAnimationRef.current = null;
-      }
-      if (glowAnimationRef.current) {
-        glowAnimationRef.current.stop();
-        glowAnimationRef.current = null;
-      }
-      
-      // Sürükleme başladığında küçültme efekti
-      Animated.spring(cardScale, {
-        toValue: 0.96,
-        tension: 100,
-        friction: 8,
-        useNativeDriver: true,
-      }).start();
-      
-      // Nefes alıp verme gibi yumuşak pulse animasyonu
-      pulseAnimationRef.current = Animated.loop(
+      // Animasyonu başlat
+      const breathingAnimation = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 0.94,
-            duration: 1200,
-            easing: Easing.inOut(Easing.ease),
+          Animated.timing(breathingAnim, {
+            toValue: 1.05,
+            duration: 800,
             useNativeDriver: true,
           }),
-          Animated.timing(pulseAnim, {
-            toValue: 0.98,
-            duration: 1200,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulseAnimationRef.current.start();
-      
-      // Border glow animasyonu - nefes alıp verme gibi yumuşak
-      glowAnimationRef.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(borderGlowAnim, {
+          Animated.timing(breathingAnim, {
             toValue: 1,
-            duration: 1500,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: false,
-          }),
-          Animated.timing(borderGlowAnim, {
-            toValue: 0,
-            duration: 1500,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: false,
+            duration: 800,
+            useNativeDriver: true,
           }),
         ])
       );
-      glowAnimationRef.current.start();
-      
+      breathingAnimation.start();
+
       return () => {
-        if (pulseAnimationRef.current) {
-          pulseAnimationRef.current.stop();
-          pulseAnimationRef.current = null;
-        }
-        if (glowAnimationRef.current) {
-          glowAnimationRef.current.stop();
-          glowAnimationRef.current = null;
-        }
+        breathingAnimation.stop();
+        breathingAnim.setValue(1);
       };
     } else {
-      // Sürükleme bittiğinde tüm animasyonları durdur ve normal boyuta dön
-      if (pulseAnimationRef.current) {
-        pulseAnimationRef.current.stop();
-        pulseAnimationRef.current = null;
-      }
-      if (glowAnimationRef.current) {
-        glowAnimationRef.current.stop();
-        glowAnimationRef.current = null;
-      }
-      
-      // Tüm animasyon değerlerini reset et
-      Animated.parallel([
-        Animated.spring(cardScale, {
-          toValue: 1,
-          tension: 150,
-          friction: 7,
-          useNativeDriver: true,
-        }),
-        Animated.spring(pulseAnim, {
-          toValue: 1,
-          tension: 150,
-          friction: 7,
-          useNativeDriver: true,
-        }),
-        Animated.timing(borderGlowAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: false,
-        }),
-      ]).start(() => {
-        // Animasyon bittikten sonra değerleri tam olarak reset et
-        cardScale.setValue(1);
-        pulseAnim.setValue(1);
-        borderGlowAnim.setValue(0);
-      });
+      // Animasyonu durdur ve değeri sıfırla
+      breathingAnim.setValue(1);
     }
   }, [isBeingDragged]);
   
@@ -197,45 +115,32 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
     }
   };
   
+  // Seçili widget için animasyonlu scale
+  const animatedStyle = isBeingDragged
+    ? { transform: [{ scale: breathingAnim }] }
+    : {};
+
   return (
-    <TouchableOpacity
-      onLongPress={onLongPress}
-      onPress={handlePress}
-      delayLongPress={300}
-      activeOpacity={0.9}
-    >
-      <Animated.View
-        style={[
-          styles.cardWrapper,
-          {
-            opacity: cardOpacity,
-            transform: [
-              { translateY: cardTranslateY },
-              { scale: Animated.multiply(cardScale, pulseAnim) },
-            ],
-          },
-          isBeingDragged && styles.beingDragged,
-          draggedIndex !== undefined && myIndex !== draggedIndex && styles.dropTarget,
-        ]}
+    <Animated.View style={animatedStyle}>
+      <TouchableOpacity
+        onLongPress={onLongPress}
+        onPress={handlePress}
+        delayLongPress={500}
+        activeOpacity={0.9}
       >
-        {isBeingDragged && (
-          <Animated.View
-            style={[
-              styles.selectionGlow,
-              {
-                opacity: borderGlowAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.3, 0.8],
-                }),
-                borderWidth: borderGlowAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [3, 5],
-                }),
-              },
-            ]}
-            pointerEvents="none"
-          />
-        )}
+        <Animated.View
+          style={[
+            styles.cardWrapper,
+            {
+              opacity: cardOpacity,
+              transform: [
+                { translateY: cardTranslateY },
+              ],
+            },
+            isBeingDragged && styles.beingDragged,
+            draggedIndex !== undefined && myIndex !== draggedIndex && styles.dropTarget,
+          ]}
+        >
       <GradientCard
         colors={effectiveGradientColors}
         style={styles.card}
@@ -344,32 +249,22 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
         </BlurView>
         </View>
       </GradientCard>
-      </Animated.View>
-    </TouchableOpacity>
+        </Animated.View>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   beingDragged: {
-    shadowColor: '#2196F3',
+    shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 10,
     },
-    shadowOpacity: 0.6,
-    shadowRadius: 25,
-    elevation: 20,
-  },
-  selectionGlow: {
-    position: 'absolute',
-    top: -3,
-    left: -3,
-    right: -3,
-    bottom: -3,
-    borderRadius: 23,
-    borderColor: '#2196F3',
-    borderStyle: 'solid',
-    backgroundColor: 'transparent',
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 15,
   },
   dropTarget: {
     borderWidth: 2,
