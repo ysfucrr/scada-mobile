@@ -648,7 +648,7 @@ export default function ConsumptionScreen() {
                         <View style={styles.yearlyHeader}>
                           <View style={styles.yearTotal}>
                             <Text style={styles.yearLabel}>{monthlyData.previousYearLabel || 'Previous Year'} Total</Text>
-                            <Text style={styles.yearTotalValue}>
+                            <Text style={[styles.yearTotalValue, { color: '#9cf990ff' }]}>
                               {formatEnergyValue(comparison.previousValue ?? 0)}
                             </Text>
                           </View>
@@ -704,25 +704,7 @@ export default function ConsumptionScreen() {
                               return (
                                 <View key={monthIndex} style={styles.monthColumn}>
                                   <View style={styles.monthBars}>
-                                    {/* Current year bar */}
-                                    <View style={styles.monthBarWrapper}>
-                                      {currentValue > 0 && (
-                                        <Text style={styles.monthBarValue}>
-                                          {formatEnergyValue(currentValue, 0)}
-                                        </Text>
-                                      )}
-                                      <View
-                                        style={[
-                                          styles.monthBar,
-                                          styles.currentYearBar,
-                                          {
-                                            height: currentBarHeight,
-                                          }
-                                        ]}
-                                      />
-                                    </View>
-                                    
-                                    {/* Previous year bar */}
+                                    {/* Previous year bar (2024 - yeşil) */}
                                     <View style={styles.monthBarWrapper}>
                                       {previousValue > 0 && (
                                         <Text style={styles.monthBarValue}>
@@ -736,6 +718,24 @@ export default function ConsumptionScreen() {
                                           {
                                             height: previousBarHeight,
                                             backgroundColor: previousBarHeight > 0 ? '#9cf990ff' : 'transparent'
+                                          }
+                                        ]}
+                                      />
+                                    </View>
+                                    
+                                    {/* Current year bar (2025 - turuncu) */}
+                                    <View style={styles.monthBarWrapper}>
+                                      {currentValue > 0 && (
+                                        <Text style={styles.monthBarValue}>
+                                          {formatEnergyValue(currentValue, 0)}
+                                        </Text>
+                                      )}
+                                      <View
+                                        style={[
+                                          styles.monthBar,
+                                          styles.currentYearBar,
+                                          {
+                                            height: currentBarHeight,
                                           }
                                         ]}
                                       />
@@ -754,12 +754,12 @@ export default function ConsumptionScreen() {
                     {/* Legend */}
                     <View style={styles.yearlyLegend}>
                       <View style={styles.legendItem}>
-                        <View style={[styles.legendDot, { backgroundColor: '#FFC107' }]} />
-                        <Text style={styles.legendText}>{monthlyData.currentYearLabel}</Text>
-                      </View>
-                      <View style={[styles.legendItem, { marginLeft: 20 }]}>
                         <View style={[styles.legendDot, { backgroundColor: '#9cf990ff' }]} />
                         <Text style={styles.legendText}>{monthlyData.previousYearLabel}</Text>
+                      </View>
+                      <View style={[styles.legendItem, { marginLeft: 20 }]}>
+                        <View style={[styles.legendDot, { backgroundColor: '#FFC107' }]} />
+                        <Text style={styles.legendText}>{monthlyData.currentYearLabel}</Text>
                       </View>
                     </View>
                   </>
