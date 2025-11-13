@@ -228,7 +228,7 @@ export default function SystemLogsScreen() {
           <View style={styles.logHeader}>
             <View style={[styles.levelBadge, { backgroundColor: `${levelColor}20` }]}>
               <MaterialCommunityIcons
-                name={getLevelIcon(item.level)}
+                name={getLevelIcon(item.level) as any}
                 size={16}
                 color={levelColor}
               />
