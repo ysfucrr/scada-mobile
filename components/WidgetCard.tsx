@@ -12,7 +12,6 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { Chip, Text, useTheme } from 'react-native-paper';
-import { useOrientation } from '../context/OrientationContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 import { AppTheme } from '../theme/theme';
 import GradientCard from './GradientCard';
@@ -37,6 +36,7 @@ interface WidgetCardProps {
   draggedIndex?: number;
   myIndex?: number;
   onDrop?: (index: number) => void;
+  noMargin?: boolean; // If true, removes marginBottom from cardWrapper
 }
 
 const WidgetCard: React.FC<WidgetCardProps> = ({
@@ -50,11 +50,11 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
   isBeingDragged = false,
   draggedIndex,
   myIndex,
-  onDrop
+  onDrop,
+  noMargin = false
 }) => {
   const theme = useTheme() as AppTheme;
   const { isDarkMode } = useAppTheme();
-  const { isLandscape, screenWidth, numColumns, isTablet } = useOrientation();
   
   // Professional single color gradient - consistent and serious
   const effectiveGradientColors = gradientColors || (
@@ -109,21 +109,9 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
     }
   };
 
-  // Calculate card width based on numColumns and device type
-  // numColumns is already optimized by OrientationContext for tablets
-  // For tablets: use optimized padding and gap values
-  // For phones: use standard padding and gap values
-  const horizontalPadding = isTablet ? (isLandscape ? 16 : 20) : 16;
-  const cardGap = isTablet ? (isLandscape ? 16 : 12) : 12;
-  
-  const cardWidth = numColumns > 1
-    ? (screenWidth - (horizontalPadding * 2) - (cardGap * (numColumns - 1))) / numColumns
-    : undefined;
-
   return (
     <Animated.View
       style={[
-        cardWidth ? { width: cardWidth, marginBottom: 0 } : undefined,
         cardStyle,
       ]}
     >
@@ -134,11 +122,11 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
         activeOpacity={0.9}
       >
         <Animated.View
-          style={[
+            style={[
             styles.cardWrapper,
+            noMargin && styles.cardWrapperNoMargin,
             isBeingDragged && styles.beingDragged,
             draggedIndex !== undefined && myIndex !== draggedIndex && styles.dropTarget,
-            isLandscape && { marginBottom: 0 },
           ]}
         >
           <GradientCard
@@ -275,6 +263,9 @@ const styles = StyleSheet.create({
   },
   cardWrapper: {
     marginBottom: 12,
+  },
+  cardWrapperNoMargin: {
+    marginBottom: 0,
   },
   card: {
     elevation: 12,

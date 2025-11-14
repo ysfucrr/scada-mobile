@@ -100,12 +100,17 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   // Use OrientationContext's numColumns directly for tablets (already optimized)
   // For phones, use optimized values:
   // Phone Portrait: 1 column (full width)
-  // Phone Landscape: 2 columns
+  // Phone Landscape: 2 columns (always 2 columns for phone landscape)
   // Tablet Portrait (810x1080): 2 columns (from OrientationContext)
   // Tablet Landscape (1080x810): 3 columns (from OrientationContext)
-  const numColumns = isTablet 
-    ? orientationNumColumns  // Use OrientationContext's optimized value for tablets
-    : (isLandscape ? 2 : 1); // Phone: 2 columns landscape, 1 column portrait
+  // Special case: If screen height is small (< 500px), treat as phone even if width >= 600px
+  // This handles cases like 932x430 which is a phone in landscape, not a tablet
+  // Also check aspect ratio: if width/height > 2, it's definitely a phone in landscape
+  const aspectRatio = width / height;
+  const isActuallyPhone = !isTablet || (isTablet && height < 500) || aspectRatio > 2;
+  const numColumns = isActuallyPhone
+    ? (isLandscape ? 2 : 1) // Phone: 2 columns landscape, 1 column portrait
+    : orientationNumColumns; // Use OrientationContext's optimized value for tablets
   
   // Calculate system card width and columns for system health cards
   // Tablet Landscape: 2 columns
@@ -605,13 +610,20 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
     const containerPadding = isTablet ? (isLandscape ? 16 : 20) : 16;
     const widgetGap = isTablet ? (isLandscape ? 16 : 12) : 12;
     
+    // Calculate widget width for multi-column layout
+    // For 2 columns: (screenWidth - 2*padding - 1*gap) / 2
+    // For 3 columns: (screenWidth - 2*padding - 2*gap) / 3
+    // etc.
+    const widgetWidth = numColumns > 1
+      ? (screenWidth - (containerPadding * 2) - (widgetGap * (numColumns - 1))) / numColumns
+      : undefined;
+    
     return (
       <View style={[
         styles.widgetsContainer,
         numColumns > 1 ? styles.widgetsContainerLandscape : undefined,
         {
           paddingHorizontal: containerPadding,
-          gap: numColumns > 1 ? widgetGap : undefined,
         }
       ]}>
         {/* Pull to Refresh Arrow Indicator - only show in overview tab */}
@@ -625,56 +637,87 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
           </Animated.View>
         )}
         
-        {widgets.map((widget, index) => (
-          <WidgetCard
-            key={widget._id}
-            id={widget._id}
-            title={widget.title}
-            registers={
-              widget.registers && Array.isArray(widget.registers)
-                ? widget.registers.map((register: any) => {
-                    const realTimeValue = widgetValues.get(register.id);
-                    let displayValue = realTimeValue !== undefined ? realTimeValue : (register.value || 'N/A');
-                    
-                    // Boolean değerleri ON/OFF'e çevir
-                    if (displayValue !== 'N/A' && displayValue !== null && displayValue !== undefined) {
-                      const isBooleanType = register.dataType?.toUpperCase() === 'BOOL' || 
-                                            register.dataType?.toUpperCase() === 'BOOLEAN';
-                      
-                      const isBooleanValue = displayValue === 1 || displayValue === 0 || 
-                                             displayValue === true || displayValue === false ||
-                                             displayValue === '1' || displayValue === '0' ||
-                                             displayValue === 'true' || displayValue === 'false';
-                      
-                      if (isBooleanType || isBooleanValue) {
-                        if (displayValue === 1 || displayValue === true || displayValue === '1' || displayValue === 'true') {
-                          displayValue = 'ON';
-                        } else if (displayValue === 0 || displayValue === false || displayValue === '0' || displayValue === 'false') {
-                          displayValue = 'OFF';
+        {widgets.map((widget, index) => {
+          // For multi-column layout, calculate proper width and margins
+          let widgetStyle: any = {};
+          
+          if (numColumns > 1 && widgetWidth !== undefined) {
+            // Calculate which column this widget is in (0-based)
+            const columnIndex = index % numColumns;
+            // Calculate which row this widget is in (0-based)
+            const rowIndex = Math.floor(index / numColumns);
+            // Calculate total number of rows
+            const totalRows = Math.ceil(widgets.length / numColumns);
+            // Check if this is the last column in the row
+            const isLastColumn = columnIndex === numColumns - 1;
+            // Check if this is the last row
+            const isLastRow = rowIndex === totalRows - 1;
+            
+            widgetStyle = {
+              width: widgetWidth,
+              // Add right margin to all widgets except those in the last column
+              marginRight: isLastColumn ? 0 : widgetGap,
+              // Add bottom margin to all widgets except those in the last row
+              marginBottom: isLastRow ? 0 : widgetGap,
+            };
+          }
+          
+          return (
+            <View
+              key={widget._id}
+              style={widgetStyle}
+            >
+              <WidgetCard
+                id={widget._id}
+                title={widget.title}
+                registers={
+                  widget.registers && Array.isArray(widget.registers)
+                    ? widget.registers.map((register: any) => {
+                        const realTimeValue = widgetValues.get(register.id);
+                        let displayValue = realTimeValue !== undefined ? realTimeValue : (register.value || 'N/A');
+                        
+                        // Boolean değerleri ON/OFF'e çevir
+                        if (displayValue !== 'N/A' && displayValue !== null && displayValue !== undefined) {
+                          const isBooleanType = register.dataType?.toUpperCase() === 'BOOL' || 
+                                                register.dataType?.toUpperCase() === 'BOOLEAN';
+                          
+                          const isBooleanValue = displayValue === 1 || displayValue === 0 || 
+                                                 displayValue === true || displayValue === false ||
+                                                 displayValue === '1' || displayValue === '0' ||
+                                                 displayValue === 'true' || displayValue === 'false';
+                          
+                          if (isBooleanType || isBooleanValue) {
+                            if (displayValue === 1 || displayValue === true || displayValue === '1' || displayValue === 'true') {
+                              displayValue = 'ON';
+                            } else if (displayValue === 0 || displayValue === false || displayValue === '0' || displayValue === 'false') {
+                              displayValue = 'OFF';
+                            }
+                          }
                         }
-                      }
-                    }
-                    
-                    const isLive = realTimeValue !== undefined;
-                    
-                    return {
-                      id: register.id,
-                      label: register.label,
-                      value: displayValue,
-                      scaleUnit: register.scaleUnit,
-                      isLive
-                    };
-                  })
-                : []
-            }
-            onLongPress={() => handleWidgetLongPress(index)}
-            onPress={() => handleWidgetPress(index)}
-            isBeingDragged={draggedWidgetIndex === index}
-            draggedIndex={draggedWidgetIndex}
-            myIndex={index}
-            onDrop={handleWidgetDrop}
-          />
-        ))}
+                        
+                        const isLive = realTimeValue !== undefined;
+                        
+                        return {
+                          id: register.id,
+                          label: register.label,
+                          value: displayValue,
+                          scaleUnit: register.scaleUnit,
+                          isLive
+                        };
+                      })
+                    : []
+                }
+                onLongPress={() => handleWidgetLongPress(index)}
+                onPress={() => handleWidgetPress(index)}
+                isBeingDragged={draggedWidgetIndex === index}
+                draggedIndex={draggedWidgetIndex}
+                myIndex={index}
+                onDrop={handleWidgetDrop}
+                noMargin={numColumns > 1}
+              />
+            </View>
+          );
+        })}
       </View>
     );
   };
@@ -1060,8 +1103,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    alignContent: 'flex-start',
   },
   pullToRefreshIndicator: {
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
