@@ -30,13 +30,19 @@ interface WidgetCardProps {
   registers: RegisterData[];
   gradientColors?: readonly [string, string, ...string[]];
   icon?: string;
-  onLongPress?: () => void;
-  onPress?: () => void;
+  onLongPress?: () => void; // Widget drag için başlığa basıldığında
+  onPress?: () => void; // Widget seçimini kaldırmak için
   isBeingDragged?: boolean;
   draggedIndex?: number;
   myIndex?: number;
   onDrop?: (index: number) => void;
   noMargin?: boolean; // If true, removes marginBottom from cardWrapper
+  // Register drag & drop için
+  onRegisterLongPress?: (registerIndex: number) => void;
+  onRegisterPress?: (registerIndex: number) => void;
+  onRegisterDrop?: (targetRegisterIndex: number) => void;
+  draggedRegisterIndex?: number;
+  onRegisterOrderChange?: (newOrder: RegisterData[]) => void;
 }
 
 const WidgetCard: React.FC<WidgetCardProps> = ({
@@ -51,7 +57,12 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
   draggedIndex,
   myIndex,
   onDrop,
-  noMargin = false
+  noMargin = false,
+  onRegisterLongPress,
+  onRegisterPress,
+  onRegisterDrop,
+  draggedRegisterIndex,
+  onRegisterOrderChange
 }) => {
   const theme = useTheme() as AppTheme;
   const { isDarkMode } = useAppTheme();
@@ -69,7 +80,10 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
   const cardTranslateY = useSharedValue(0);
   const breathingAnim = useSharedValue(1);
   
-  // Breathing animation - Reanimated 3
+  // Register drag animations
+  const registerBreathingAnims = useRef<Map<number, any>>(new Map()).current;
+  
+  // Breathing animation - Reanimated 3 for widget
   useEffect(() => {
     if (isBeingDragged) {
       breathingAnim.value = withRepeat(
@@ -98,7 +112,8 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
   const canDrop = draggedIndex !== undefined && draggedIndex !== myIndex;
   const isSelected = draggedIndex !== undefined && draggedIndex === myIndex;
 
-  const handlePress = () => {
+  // Widget press handler - sadece widget seçimi için
+  const handleWidgetPress = () => {
     // Eğer bu widget seçiliyse, seçimi kaldır
     if (isSelected && onPress) {
       onPress();
@@ -109,68 +124,96 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
     }
   };
 
+  // Register drag handlers
+  const handleRegisterLongPress = (registerIndex: number) => {
+    if (onRegisterLongPress) {
+      onRegisterLongPress(registerIndex);
+    }
+  };
+
+  const handleRegisterPress = (registerIndex: number) => {
+    if (onRegisterPress) {
+      onRegisterPress(registerIndex);
+    }
+  };
+
+  const handleRegisterDrop = (targetRegisterIndex: number) => {
+    if (onRegisterDrop && draggedRegisterIndex !== undefined) {
+      onRegisterDrop(targetRegisterIndex);
+    }
+  };
+
+  const canDropRegister = (registerIndex: number) => {
+    return draggedRegisterIndex !== undefined && draggedRegisterIndex !== registerIndex;
+  };
+
+  const isRegisterSelected = (registerIndex: number) => {
+    return draggedRegisterIndex === registerIndex;
+  };
+
   return (
     <Animated.View
       style={[
         cardStyle,
       ]}
     >
-      <TouchableOpacity
-        onLongPress={onLongPress}
-        onPress={handlePress}
-        delayLongPress={500}
-        activeOpacity={0.9}
+      <Animated.View
+        style={[
+          styles.cardWrapper,
+          noMargin && styles.cardWrapperNoMargin,
+          isBeingDragged && styles.beingDragged,
+          draggedIndex !== undefined && myIndex !== draggedIndex && styles.dropTarget,
+        ]}
       >
-        <Animated.View
-            style={[
-            styles.cardWrapper,
-            noMargin && styles.cardWrapperNoMargin,
-            isBeingDragged && styles.beingDragged,
-            draggedIndex !== undefined && myIndex !== draggedIndex && styles.dropTarget,
-          ]}
+        <GradientCard
+          colors={effectiveGradientColors}
+          style={styles.card}
+          mode="elevated"
+          onPress={undefined}
         >
-          <GradientCard
-            colors={effectiveGradientColors}
-            style={styles.card}
-            mode="elevated"
-            onPress={undefined}
-          >
-        <View style={styles.cardOverflowWrapper}>
-          <BlurView
-            intensity={isDarkMode ? 20 : 15}
-            tint={isDarkMode ? "dark" : "light"}
-            style={styles.blurContainer}
-          >
-            <View style={styles.content}>
-            {/* Header */}
-            <View style={styles.header}>
-              <View style={styles.iconWrapper}>
-                <MaterialCommunityIcons
-                  name={icon as any}
-                  size={24}
-                  color="white"
-                />
-              </View>
-              
-              <Text variant="titleLarge" style={styles.title}>
-                {title}
-              </Text>
-              
-              {registers.length > 0 ? (
-                <Chip
-                  mode="flat"
-                  style={styles.countChip}
-                  textStyle={styles.countChipText}
-                  icon={() => (
-                    <MaterialCommunityIcons name="counter" size={14} color="white" />
-                  )}
+          <View style={styles.cardOverflowWrapper}>
+            <BlurView
+              intensity={isDarkMode ? 20 : 15}
+              tint={isDarkMode ? "dark" : "light"}
+              style={styles.blurContainer}
+            >
+              <View style={styles.content}>
+                {/* Header - Widget drag için başlığa basılı tutma */}
+                <TouchableOpacity
+                  onLongPress={onLongPress}
+                  onPress={handleWidgetPress}
+                  delayLongPress={500}
+                  activeOpacity={0.8}
                 >
-                  {registers.length}
-                </Chip>
-              ) : (
-                <View style={styles.countChipPlaceholder} />
-              )}
-            </View>
+                  <View style={styles.header}>
+                    <View style={styles.iconWrapper}>
+                      <MaterialCommunityIcons
+                        name={icon as any}
+                        size={24}
+                        color="white"
+                      />
+                    </View>
+                    
+                    <Text variant="titleLarge" style={styles.title}>
+                      {title}
+                    </Text>
+                    
+                    {registers.length > 0 ? (
+                      <Chip
+                        mode="flat"
+                        style={styles.countChip}
+                        textStyle={styles.countChipText}
+                        icon={() => (
+                          <MaterialCommunityIcons name="counter" size={14} color="white" />
+                        )}
+                      >
+                        {registers.length}
+                      </Chip>
+                    ) : (
+                      <View style={styles.countChipPlaceholder} />
+                    )}
+                  </View>
+                </TouchableOpacity>
 
             {/* Content */}
             {registers.length === 0 ? (
@@ -185,52 +228,69 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
               </View>
             ) : (
               <View style={styles.registersGrid}>
-                {registers.map((register, index) => (
-                  <View
-                    key={register.id}
-                    style={[
-                      styles.registerCard,
-                      { width: registers.length === 1 ? '100%' :
-                        registers.length === 2 ? '48%' :
-                        '31%' }
-                    ]}
-                  >
-                    {register.isLive && (
-                      <View style={styles.liveIndicator}>
-                        <View style={styles.liveDot} />
-                      </View>
-                    )}
-                    
-                    <View style={styles.registerContent}>
-                      <Text
-                        variant="labelSmall"
-                        style={styles.registerLabel}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {register.label}
-                      </Text>
+                {registers.map((register, registerIndex) => {
+                  const isRegisterDragged = isRegisterSelected(registerIndex);
+                  const canDropOnRegister = canDropRegister(registerIndex);
+                  
+                  return (
+                    <TouchableOpacity
+                      key={register.id}
+                      onLongPress={() => handleRegisterLongPress(registerIndex)}
+                      onPress={() => {
+                        if (isRegisterDragged && onRegisterPress) {
+                          onRegisterPress(registerIndex);
+                        } else if (canDropOnRegister) {
+                          handleRegisterDrop(registerIndex);
+                        }
+                      }}
+                      delayLongPress={500}
+                      activeOpacity={0.9}
+                      style={[
+                        styles.registerCard,
+                        { width: registers.length === 1 ? '100%' :
+                          registers.length === 2 ? '48%' :
+                          '31%' },
+                        isRegisterDragged && styles.registerBeingDragged,
+                        canDropOnRegister && styles.registerDropTarget,
+                      ]}
+                    >
+                      {register.isLive && (
+                        <View style={styles.liveIndicator}>
+                          <View style={styles.liveDot} />
+                        </View>
+                      )}
                       
-                      <View style={styles.valueContainer}>
+                      <View style={styles.registerContent}>
                         <Text
-                          style={[
-                            styles.registerValue,
-                            register.isLive && styles.liveValue,
-                          ]}
+                          variant="labelSmall"
+                          style={styles.registerLabel}
                           numberOfLines={1}
-                          allowFontScaling={false}
+                          ellipsizeMode="tail"
                         >
-                          {String(register.value)}
+                          {register.label}
                         </Text>
-                        {register.scaleUnit && (
-                          <Text style={styles.unit} numberOfLines={1} allowFontScaling={false}>
-                            {register.scaleUnit}
+                        
+                        <View style={styles.valueContainer}>
+                          <Text
+                            style={[
+                              styles.registerValue,
+                              register.isLive && styles.liveValue,
+                            ]}
+                            numberOfLines={1}
+                            allowFontScaling={false}
+                          >
+                            {String(register.value)}
                           </Text>
-                        )}
+                          {register.scaleUnit && (
+                            <Text style={styles.unit} numberOfLines={1} allowFontScaling={false}>
+                              {register.scaleUnit}
+                            </Text>
+                          )}
+                        </View>
                       </View>
-                    </View>
-                  </View>
-                ))}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </View>
@@ -238,7 +298,6 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
         </View>
       </GradientCard>
         </Animated.View>
-      </TouchableOpacity>
     </Animated.View>
   );
 };
@@ -351,6 +410,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 4,
+  },
+  registerBeingDragged: {
+    shadowColor: '#F44336',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
+    borderColor: 'rgba(244, 67, 54, 0.6)',
+    borderWidth: 2,
+  },
+  registerDropTarget: {
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderStyle: 'dashed',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   liveIndicator: {
     position: 'absolute',

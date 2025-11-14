@@ -134,6 +134,9 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   const [widgetsLoading, setWidgetsLoading] = useState(true);
   const [widgetValues, setWidgetValues] = useState<Map<string, any>>(new Map());
   const [draggedWidgetIndex, setDraggedWidgetIndex] = useState<number | undefined>(undefined);
+  // Register drag & drop için state'ler
+  const [draggedRegisterWidgetId, setDraggedRegisterWidgetId] = useState<string | undefined>(undefined);
+  const [draggedRegisterIndex, setDraggedRegisterIndex] = useState<number | undefined>(undefined);
   
   // Callbacks ref
   const callbacksMapRef = useRef(new Map<string, (value: any) => void>());
@@ -346,6 +349,44 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
         console.log('Widget sıralaması yüklenirken hata:', error);
       }
       
+      // Her widget için register sıralamasını yükle
+      for (const widget of orderedWidgets) {
+        if (widget.registers && Array.isArray(widget.registers)) {
+          try {
+            const savedRegisterOrder = await AsyncStorage.getItem(`widget_${widget._id}_register_order`);
+            if (savedRegisterOrder) {
+              const registerOrderIds = JSON.parse(savedRegisterOrder);
+              
+              if (Array.isArray(registerOrderIds) && registerOrderIds.length > 0) {
+                // Kaydedilmiş sıraya göre register'ları düzenle
+                const orderedRegisters: any[] = [];
+                
+                // Önce kayıtlı sıraya göre register'ları ekle
+                registerOrderIds.forEach((registerId: string) => {
+                  const register = widget.registers.find((r: any) => r.id === registerId);
+                  if (register) {
+                    orderedRegisters.push(register);
+                  }
+                });
+                
+                // Kayıtlı sırada olmayan register'ları sonuna ekle
+                widget.registers.forEach((register: any) => {
+                  if (!registerOrderIds.includes(register.id)) {
+                    orderedRegisters.push(register);
+                  }
+                });
+                
+                if (orderedRegisters.length > 0) {
+                  widget.registers = orderedRegisters;
+                }
+              }
+            }
+          } catch (error) {
+            console.log(`Widget ${widget._id} register sıralaması yüklenirken hata:`, error);
+          }
+        }
+      }
+      
       setWidgets(orderedWidgets);
       
       // Subscribe to widget registers via WebSocket - only when overview tab is active
@@ -551,6 +592,60 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
     setDraggedWidgetIndex(undefined);
   }, [draggedWidgetIndex, widgets]);
 
+  // Register drag & drop handlers
+  const handleRegisterLongPress = useCallback((widgetId: string, registerIndex: number) => {
+    setDraggedRegisterWidgetId(widgetId);
+    setDraggedRegisterIndex(registerIndex);
+  }, []);
+
+  const handleRegisterPress = useCallback((widgetId: string, registerIndex: number) => {
+    // Eğer bu register zaten seçiliyse, seçimi kaldır
+    if (draggedRegisterWidgetId === widgetId && draggedRegisterIndex === registerIndex) {
+      setDraggedRegisterWidgetId(undefined);
+      setDraggedRegisterIndex(undefined);
+    }
+  }, [draggedRegisterWidgetId, draggedRegisterIndex]);
+
+  const handleRegisterDrop = useCallback(async (widgetId: string, targetRegisterIndex: number) => {
+    if (draggedRegisterWidgetId !== widgetId || draggedRegisterIndex === undefined || draggedRegisterIndex === targetRegisterIndex) {
+      setDraggedRegisterWidgetId(undefined);
+      setDraggedRegisterIndex(undefined);
+      return;
+    }
+
+    // Widget'ı bul
+    const widgetIndex = widgets.findIndex(w => w._id === widgetId);
+    if (widgetIndex === -1) return;
+
+    // Widget'ın register'larını güncelle
+    const newWidgets = [...widgets];
+    const widget = { ...newWidgets[widgetIndex] };
+    const registers = [...(widget.registers || [])];
+    
+    // Register'ları yeniden sırala
+    const [draggedRegister] = registers.splice(draggedRegisterIndex, 1);
+    registers.splice(targetRegisterIndex, 0, draggedRegister);
+    
+    // Widget'ı güncelle
+    widget.registers = registers;
+    newWidgets[widgetIndex] = widget;
+    
+    // Widget'ları güncelle
+    setWidgets(newWidgets);
+    
+    // Yeni sıralamayı AsyncStorage'a kaydet
+    try {
+      const registerOrder = registers.map((r: any) => r.id);
+      await AsyncStorage.setItem(`widget_${widgetId}_register_order`, JSON.stringify(registerOrder));
+    } catch (error) {
+      console.error('Register sıralaması kaydedilirken hata:', error);
+    }
+    
+    // Sürüklemeyi sonlandır
+    setDraggedRegisterWidgetId(undefined);
+    setDraggedRegisterIndex(undefined);
+  }, [draggedRegisterWidgetId, draggedRegisterIndex, widgets]);
+
   // Format bytes to human-readable format
   const formatBytes = (bytes: number, decimals = 2) => {
     if (bytes === 0) return "0 Bytes";
@@ -714,6 +809,10 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
                 myIndex={index}
                 onDrop={handleWidgetDrop}
                 noMargin={numColumns > 1}
+                onRegisterLongPress={(registerIndex: number) => handleRegisterLongPress(widget._id, registerIndex)}
+                onRegisterPress={(registerIndex: number) => handleRegisterPress(widget._id, registerIndex)}
+                onRegisterDrop={(targetRegisterIndex: number) => handleRegisterDrop(widget._id, targetRegisterIndex)}
+                draggedRegisterIndex={draggedRegisterWidgetId === widget._id ? draggedRegisterIndex : undefined}
               />
             </View>
           );
