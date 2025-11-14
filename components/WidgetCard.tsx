@@ -218,12 +218,12 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
                             register.isLive && styles.liveValue,
                           ]}
                           numberOfLines={1}
-                          adjustsFontSizeToFit
+                          allowFontScaling={false}
                         >
-                          {register.value}
+                          {String(register.value)}
                         </Text>
                         {register.scaleUnit && (
-                          <Text style={styles.unit} numberOfLines={1}>
+                          <Text style={styles.unit} numberOfLines={1} allowFontScaling={false}>
                             {register.scaleUnit}
                           </Text>
                         )}
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
   registerCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: 18,
-    padding: 16,
+    padding: 8,
     borderWidth: 1.5,
     borderColor: 'rgba(255, 255, 255, 0.35)',
     minHeight: 90,
@@ -380,6 +380,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    width: '100%',
+    minWidth: 0,
   },
   registerLabel: {
     color: 'rgba(255, 255, 255, 0.85)',
@@ -388,19 +390,25 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: 'center',
     letterSpacing: 0.5,
+    width: '100%',
   },
   valueContainer: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     gap: 4,
     justifyContent: 'center',
+    width: '100%',
+    flexWrap: 'nowrap',
+    minWidth: 0,
   },
   registerValue: {
     fontWeight: '800',
     color: '#FFFFFF',
     fontSize: 20,
-    textAlign: 'center',
     letterSpacing: 0.3,
+    flexShrink: 0,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   liveValue: {
     color: '#F44336',
