@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { MotiView } from 'moti';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Divider, IconButton, Text, useTheme } from 'react-native-paper';
@@ -38,7 +39,12 @@ const DataCard: React.FC<DataCardProps> = ({
   const effectiveGradientColors = gradientColors || (isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const);
 
   return (
-    <View style={styles.cardWrapper}>
+    <MotiView
+      from={{ opacity: 0, translateY: 20 }}
+      animate={{ opacity: 1, translateY: 0 }}
+      transition={{ type: 'spring', damping: 12, stiffness: 100 }}
+      style={styles.cardWrapper}
+    >
       <GradientCard
         colors={effectiveGradientColors}
         style={styles.card}
@@ -127,7 +133,7 @@ const DataCard: React.FC<DataCardProps> = ({
           </View>
         </BlurView>
       </GradientCard>
-    </View>
+    </MotiView>
   );
 };
 

@@ -271,6 +271,14 @@ export default function SystemLogsScreen() {
     return (
       <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
         <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+        <LinearGradient
+          colors={isDarkMode 
+            ? ['#0D1B2A', '#1B263B', '#415A77'] 
+            : ['#E3F2FD', '#BBDEFB', '#90CAF9']}
+          style={StyleSheet.absoluteFillObject}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
         <View style={styles.centerContainer}>
           <MaterialCommunityIcons
             name="alert-circle-outline"
@@ -291,9 +299,21 @@ export default function SystemLogsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-      
+      <LinearGradient
+        colors={isDarkMode 
+          ? ['#0D1B2A', '#1B263B', '#415A77'] 
+          : ['#E3F2FD', '#BBDEFB', '#90CAF9']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
       {/* Header Controls */}
-      <View style={[styles.headerControls, { backgroundColor: paperTheme.colors.surface }]}>
+      <BlurView
+        intensity={isDarkMode ? 30 : 20}
+        tint={isDarkMode ? "dark" : "light"}
+        style={styles.headerControls}
+      >
+        <View style={styles.headerControlsContent}>
         <View style={styles.controlsRow}>
           <TouchableOpacity
             onPress={togglePause}
@@ -329,7 +349,7 @@ export default function SystemLogsScreen() {
         </View>
         
         {showFilters && (
-          <View style={[styles.filtersContainer, { backgroundColor: paperTheme.colors.surfaceVariant }]}>
+          <View style={styles.filtersContainer}>
             {/* Level Filter */}
             <View style={styles.filterRow}>
               <Text style={[styles.filterLabel, { color: paperTheme.colors.onSurfaceVariant }]}>
@@ -415,7 +435,8 @@ export default function SystemLogsScreen() {
             {isPaused ? 'Paused' : 'Live'}
           </Text>
         </View>
-      </View>
+        </View>
+      </BlurView>
       
       {/* Logs List */}
       <Animated.View
@@ -455,6 +476,7 @@ export default function SystemLogsScreen() {
             data={logs}
             keyExtractor={(item, index) => `${item.timestamp}-${index}`}
             renderItem={renderLogItem}
+            style={styles.list}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
@@ -463,8 +485,13 @@ export default function SystemLogsScreen() {
                 tintColor={paperTheme.colors.primary}
               />
             }
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              logs.length === 0 && styles.listContentEmpty
+            ]}
             inverted={false}
+            scrollEnabled={true}
+            nestedScrollEnabled={false}
           />
         )}
       </Animated.View>
@@ -594,12 +621,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   headerControls: {
+    paddingBottom: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    overflow: 'hidden',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  headerControlsContent: {
     padding: 16,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    backgroundColor: 'transparent',
   },
   controlsRow: {
     flexDirection: 'row',
@@ -611,10 +642,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     gap: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   controlButtonText: {
     color: '#FFFFFF',
@@ -625,6 +664,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
+    backgroundColor: 'transparent',
   },
   filterRow: {
     marginBottom: 12,
@@ -641,10 +681,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   filterChipText: {
     fontSize: 12,
@@ -655,10 +703,18 @@ const styles = StyleSheet.create({
   },
   filterInput: {
     marginTop: 8,
-    padding: 12,
-    borderRadius: 8,
+    padding: 14,
+    borderRadius: 12,
     borderWidth: 1,
     fontSize: 14,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   statsRow: {
     flexDirection: 'row',
@@ -674,8 +730,17 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  list: {
+    flex: 1,
+  },
   listContent: {
     padding: 16,
+    flexGrow: 1,
+  },
+  listContentEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   logItem: {
     padding: 16,

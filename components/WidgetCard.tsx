@@ -1,7 +1,17 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { MotiView } from 'moti';
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, TouchableOpacity } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withRepeat,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 import { Chip, Text, useTheme } from 'react-native-paper';
 import { useOrientation } from '../context/OrientationContext';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
@@ -47,65 +57,48 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
   const { isDarkMode } = useAppTheme();
   const { isLandscape, screenWidth, numColumns, isTablet } = useOrientation();
   
-  // Set default gradient colors based on dark mode
-  const effectiveGradientColors = gradientColors || (isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const);
+  // Professional single color gradient - consistent and serious
+  const effectiveGradientColors = gradientColors || (
+    isDarkMode 
+      ? ['#1E3A5F', '#2D4F7C', '#3A6599'] as [string, string, ...string[]] // Professional dark blue
+      : ['#1E88E5', '#42A5F5', '#64B5F6'] as [string, string, ...string[]] // Professional light blue
+  );
   
-  // Animations
-  const cardOpacity = useRef(new Animated.Value(0)).current;
-  const cardTranslateY = useRef(new Animated.Value(30)).current;
-  const breathingAnim = useRef(new Animated.Value(1)).current;
+  // Animations - Reanimated 3
+  // Always start with visible values to prevent white flash on tab switch or re-render
+  const cardOpacity = useSharedValue(1);
+  const cardTranslateY = useSharedValue(0);
+  const breathingAnim = useSharedValue(1);
   
-  useEffect(() => {
-    // Card entrance animation
-    Animated.parallel([
-      Animated.timing(cardOpacity, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.spring(cardTranslateY, {
-        toValue: 0,
-        tension: 50,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-  
-  // Nefes alma animasyonu - widget seçildiğinde başlat
+  // Breathing animation - Reanimated 3
   useEffect(() => {
     if (isBeingDragged) {
-      // Animasyonu başlat
-      const breathingAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(breathingAnim, {
-            toValue: 1.05,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(breathingAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
+      breathingAnim.value = withRepeat(
+        withSequence(
+          withTiming(1.05, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        false
       );
-      breathingAnimation.start();
-
-      return () => {
-        breathingAnimation.stop();
-        breathingAnim.setValue(1);
-      };
     } else {
-      // Animasyonu durdur ve değeri sıfırla
-      breathingAnim.setValue(1);
+      breathingAnim.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
     }
   }, [isBeingDragged]);
+
+  // Animated styles
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: cardOpacity.value,
+    transform: [
+      { translateY: cardTranslateY.value },
+      { scale: isBeingDragged ? breathingAnim.value : 1 },
+    ],
+  }));
   
   
   const canDrop = draggedIndex !== undefined && draggedIndex !== myIndex;
   const isSelected = draggedIndex !== undefined && draggedIndex === myIndex;
-  
+
   const handlePress = () => {
     // Eğer bu widget seçiliyse, seçimi kaldır
     if (isSelected && onPress) {
@@ -116,11 +109,6 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
       onDrop(myIndex || 0);
     }
   };
-  
-  // Seçili widget için animasyonlu scale
-  const animatedStyle = isBeingDragged
-    ? { transform: [{ scale: breathingAnim }] }
-    : {};
 
   // Calculate card width based on numColumns and device type
   // numColumns is already optimized by OrientationContext for tablets
@@ -134,13 +122,12 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
     : undefined;
 
   return (
-    <Animated.View style={[
-      animatedStyle, 
-      cardWidth ? { 
-        width: cardWidth,
-        marginBottom: 0,
-      } : undefined
-    ]}>
+    <Animated.View
+      style={[
+        cardWidth ? { width: cardWidth, marginBottom: 0 } : undefined,
+        cardStyle,
+      ]}
+    >
       <TouchableOpacity
         onLongPress={onLongPress}
         onPress={handlePress}
@@ -150,23 +137,17 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
         <Animated.View
           style={[
             styles.cardWrapper,
-            {
-              opacity: cardOpacity,
-              transform: [
-                { translateY: cardTranslateY },
-              ],
-            },
             isBeingDragged && styles.beingDragged,
             draggedIndex !== undefined && myIndex !== draggedIndex && styles.dropTarget,
             isLandscape && { marginBottom: 0 },
           ]}
         >
-      <GradientCard
-        colors={effectiveGradientColors}
-        style={styles.card}
-        mode="elevated"
-        onPress={undefined}
-      >
+          <GradientCard
+            colors={effectiveGradientColors}
+            style={styles.card}
+            mode="elevated"
+            onPress={undefined}
+          >
         <View style={styles.cardOverflowWrapper}>
           <BlurView
             intensity={isDarkMode ? 20 : 15}
@@ -228,9 +209,25 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
                     ]}
                   >
                     {register.isLive && (
-                      <View style={styles.liveIndicator}>
-                        <View style={styles.liveDot} />
-                      </View>
+                      <MotiView
+                        from={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: 'spring', damping: 8, stiffness: 200 }}
+                        style={styles.liveIndicator}
+                      >
+                        <MotiView
+                          animate={{
+                            scale: [1, 1.3, 1],
+                          }}
+                          transition={{
+                            type: 'timing',
+                            duration: 1500,
+                            loop: true,
+                            repeatReverse: true,
+                          }}
+                          style={styles.liveDot}
+                        />
+                      </MotiView>
                     )}
                     
                     <View style={styles.registerContent}>
@@ -244,16 +241,28 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
                       </Text>
                       
                       <View style={styles.valueContainer}>
-                        <Text
-                          style={[
-                            styles.registerValue,
-                            register.isLive && styles.liveValue,
-                          ]}
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
+                        <MotiView
+                          animate={{
+                            scale: register.isLive ? [1, 1.05, 1] : 1,
+                          }}
+                          transition={{
+                            type: 'timing',
+                            duration: 1000,
+                            loop: register.isLive,
+                            repeatReverse: true,
+                          }}
                         >
-                          {register.value}
-                        </Text>
+                          <Text
+                            style={[
+                              styles.registerValue,
+                              register.isLive && styles.liveValue,
+                            ]}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                          >
+                            {register.value}
+                          </Text>
+                        </MotiView>
                         {register.scaleUnit && (
                           <Text style={styles.unit} numberOfLines={1}>
                             {register.scaleUnit}
@@ -297,15 +306,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   card: {
-    elevation: 8,
+    elevation: 12,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 8,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    borderRadius: 20,
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    borderRadius: 24,
+    overflow: 'hidden',
   },
   cardOverflowWrapper: {
     overflow: 'hidden',
@@ -366,33 +376,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   registerCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
-    minHeight: 80,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    minHeight: 90,
     position: 'relative',
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   liveIndicator: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(244, 67, 54, 0.2)',
-    borderRadius: 10,
+    backgroundColor: 'rgba(244, 67, 54, 0.3)',
+    borderRadius: 8,
     padding: 4,
+    shadowColor: '#F44336',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 3,
   },
   liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#F44336',
+    shadowColor: '#F44336',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   registerContent: {
     flex: 1,

@@ -2,11 +2,11 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MotiView } from 'moti';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
@@ -20,6 +20,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withRepeat,
+  withSequence,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
 import { useConnection } from '../context/ConnectionContext';
 import { useOrientation } from '../context/OrientationContext';
 import { useWebSocket } from '../context/WebSocketContext';
@@ -77,73 +87,62 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [showAgentSelector, setShowAgentSelector] = useState(false);
 
-  // Animations
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
-  const logoScaleAnim = useRef(new Animated.Value(0)).current;
-  const logoRotateAnim = useRef(new Animated.Value(0)).current;
-  const formOpacityAnim = useRef(new Animated.Value(0)).current;
-  const backgroundPulseAnim = useRef(new Animated.Value(1)).current;
+  // Animations - Reanimated 3
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(30);
+  const logoScaleAnim = useSharedValue(0);
+  const logoRotateAnim = useSharedValue(0);
+  const formOpacityAnim = useSharedValue(0);
+  const backgroundPulseAnim = useSharedValue(1);
+
+  // Animated styles - Reanimated 3
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+  }));
+
+  const logoStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: logoScaleAnim.value },
+      { rotate: `${logoRotateAnim.value * 10}deg` },
+    ],
+  }));
+
+  const formStyle = useAnimatedStyle(() => ({
+    opacity: formOpacityAnim.value,
+    transform: [{ translateY: formOpacityAnim.value * 20 }],
+  }));
+
+  const backgroundStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: backgroundPulseAnim.value }],
+  }));
 
   useEffect(() => {
-    // Start animations
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        tension: 50,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-      Animated.spring(logoScaleAnim, {
-        toValue: 1,
-        tension: 40,
-        friction: 6,
-        useNativeDriver: true,
-      }),
-      Animated.timing(formOpacityAnim, {
-        toValue: 1,
-        duration: 600,
-        delay: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Start animations - Reanimated 3
+    fadeAnim.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.ease) });
+    slideAnim.value = withSpring(0, { damping: 8, stiffness: 50 });
+    logoScaleAnim.value = withSpring(1, { damping: 6, stiffness: 40 });
+    formOpacityAnim.value = withDelay(300, withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) }));
 
     // Logo rotation animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(logoRotateAnim, {
-          toValue: 1,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(logoRotateAnim, {
-          toValue: 0,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
+    logoRotateAnim.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
 
     // Background pulse animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(backgroundPulseAnim, {
-          toValue: 1.05,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(backgroundPulseAnim, {
-          toValue: 1,
-          duration: 3000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
+    backgroundPulseAnim.value = withRepeat(
+      withSequence(
+        withTiming(1.05, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
 
     // Clear any previously selected agent before loading the login screen
     const clearPreviousAgent = async () => {
@@ -348,21 +347,10 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
     );
   }
 
-  // Interpolated values for animations
-  const logoRotate = logoRotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['-5deg', '5deg'],
-  });
-
   return (
     <View style={styles.container}>
       {/* Top Blue Section - Limited to upper portion */}
-      <Animated.View 
-        style={[
-          styles.topBlueSection,
-          { transform: [{ scale: backgroundPulseAnim }] }
-        ]}
-      >
+      <Animated.View style={[styles.topBlueSection, backgroundStyle]}>
         <LinearGradient
           colors={['#0D47A1', '#1565C0', '#1E88E5', '#42A5F5']}
           style={StyleSheet.absoluteFillObject}
@@ -403,26 +391,13 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View 
-            style={[
-              styles.content,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
-              },
-            ]}
-          >
+          <Animated.View style={[styles.content, contentStyle]}>
             {/* Modern Logo Section with Animation */}
             <Animated.View 
               style={[
                 styles.logoContainer,
                 isTablet && styles.logoContainerTablet,
-                {
-                  transform: [
-                    { scale: logoScaleAnim },
-                    { rotate: logoRotate },
-                  ],
-                },
+                logoStyle,
               ]}
             >
               <View style={styles.logoWrapper}>
@@ -440,10 +415,10 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
                 {/* Outer glow ring */}
                 <View style={styles.logoGlowRing} />
               </View>
-              <Animated.Text style={[styles.title, { opacity: fadeAnim }]}>
+              <Animated.Text style={[styles.title, contentStyle]}>
                 SCADA Mobile
               </Animated.Text>
-              <Animated.Text style={[styles.subtitle, { opacity: fadeAnim }]}>
+              <Animated.Text style={[styles.subtitle, contentStyle]}>
                 Industrial Control System
               </Animated.Text>
             </Animated.View>
@@ -453,17 +428,7 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
               style={[
                 styles.formContainer,
                 isTablet && styles.formContainerTablet,
-                {
-                  opacity: formOpacityAnim,
-                  transform: [
-                    {
-                      translateY: formOpacityAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [20, 0],
-                      }),
-                    },
-                  ],
-                },
+                formStyle,
               ]}
             >
               <BlurView
@@ -481,112 +446,135 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
                     <Text style={styles.welcomeSubtitle}>Sign in to continue</Text>
                   </View>
                   {/* Username Input - Modern Design */}
-                  <View style={styles.inputWrapper}>
-                    <Text style={styles.inputLabel}>Username</Text>
-                    <View style={[
-                      styles.inputContainer,
-                      username ? styles.inputContainerFocused : null
-                    ]}>
-                      <View style={styles.inputIconContainer}>
-                        <MaterialCommunityIcons 
-                          name="account-outline" 
-                          size={24} 
-                          color={username ? theme.colors.primary : theme.colors.text.secondary} 
+                  <MotiView
+                    from={{ opacity: 0, translateY: 20 }}
+                    animate={{ opacity: 1, translateY: 0 }}
+                    transition={{ type: 'timing', duration: 400, delay: 100 }}
+                  >
+                    <View style={styles.inputWrapper}>
+                      <Text style={styles.inputLabel}>Username</Text>
+                      <View style={[
+                        styles.inputContainer,
+                        username ? styles.inputContainerFocused : null
+                      ]}>
+                        <View style={styles.inputIconContainer}>
+                          <MaterialCommunityIcons 
+                            name="account-outline" 
+                            size={24} 
+                            color={username ? theme.colors.primary : theme.colors.text.secondary} 
+                          />
+                        </View>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter your username"
+                          placeholderTextColor={theme.colors.text.secondary}
+                          value={username}
+                          onChangeText={setUsername}
+                          autoCapitalize="none"
+                          autoCorrect={false}
                         />
                       </View>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Enter your username"
-                        placeholderTextColor={theme.colors.text.secondary}
-                        value={username}
-                        onChangeText={setUsername}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                      />
                     </View>
-                  </View>
+                  </MotiView>
 
                   {/* Password Input - Modern Design */}
-                  <View style={styles.inputWrapper}>
-                    <Text style={styles.inputLabel}>Password</Text>
-                    <View style={[
-                      styles.inputContainer,
-                      password ? styles.inputContainerFocused : null
-                    ]}>
-                      <View style={styles.inputIconContainer}>
-                        <MaterialCommunityIcons
-                          name="lock-outline"
-                          size={24}
-                          color={password ? theme.colors.primary : theme.colors.text.secondary}
+                  <MotiView
+                    from={{ opacity: 0, translateY: 20 }}
+                    animate={{ opacity: 1, translateY: 0 }}
+                    transition={{ type: 'timing', duration: 400, delay: 200 }}
+                  >
+                    <View style={styles.inputWrapper}>
+                      <Text style={styles.inputLabel}>Password</Text>
+                      <View style={[
+                        styles.inputContainer,
+                        password ? styles.inputContainerFocused : null
+                      ]}>
+                        <View style={styles.inputIconContainer}>
+                          <MaterialCommunityIcons
+                            name="lock-outline"
+                            size={24}
+                            color={password ? theme.colors.primary : theme.colors.text.secondary}
+                          />
+                        </View>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Enter your password"
+                          placeholderTextColor={theme.colors.text.secondary}
+                          value={password}
+                          onChangeText={setPassword}
+                          secureTextEntry={!showPassword}
+                          autoCapitalize="none"
+                          autoCorrect={false}
                         />
+                        <TouchableOpacity
+                          onPress={() => setShowPassword(!showPassword)}
+                          style={styles.eyeButton}
+                          activeOpacity={0.7}
+                        >
+                          <MaterialCommunityIcons
+                            name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                            size={22}
+                            color={password ? theme.colors.primary : theme.colors.text.secondary}
+                          />
+                        </TouchableOpacity>
                       </View>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Enter your password"
-                        placeholderTextColor={theme.colors.text.secondary}
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry={!showPassword}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                      />
-                      <TouchableOpacity
-                        onPress={() => setShowPassword(!showPassword)}
-                        style={styles.eyeButton}
-                        activeOpacity={0.7}
-                      >
-                        <MaterialCommunityIcons
-                          name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                          size={22}
-                          color={password ? theme.colors.primary : theme.colors.text.secondary}
-                        />
-                      </TouchableOpacity>
                     </View>
-                  </View>
+                  </MotiView>
                   
                   {/* SCADA System Selector - Modern Design */}
                   {agents.length > 0 && (
-                    <View style={styles.inputWrapper}>
-                      <Text style={styles.inputLabel}>SCADA System</Text>
-                      <TouchableOpacity
-                        style={[
-                          styles.inputContainer,
-                          styles.agentSelectorContainer,
-                          selectedAgent ? styles.selectedInputContainer : null
-                        ]}
-                        onPress={async () => {
-                          console.log('[LoginScreen] Refreshing agent list before opening modal');
-                          await fetchAvailableAgents();
-                          setShowAgentSelector(true);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.inputIconContainer}>
-                          <MaterialCommunityIcons
-                            name="server-network"
-                            size={24}
-                            color={selectedAgent ? theme.colors.primary : theme.colors.text.secondary}
-                          />
-                        </View>
-                        <Text
+                    <MotiView
+                      from={{ opacity: 0, translateY: 20 }}
+                      animate={{ opacity: 1, translateY: 0 }}
+                      transition={{ type: 'timing', duration: 400, delay: 300 }}
+                    >
+                      <View style={styles.inputWrapper}>
+                        <Text style={styles.inputLabel}>SCADA System</Text>
+                        <TouchableOpacity
                           style={[
-                            styles.input,
-                            !selectedAgent && styles.placeholderText
+                            styles.inputContainer,
+                            styles.agentSelectorContainer,
+                            selectedAgent ? styles.selectedInputContainer : null
                           ]}
+                          onPress={async () => {
+                            console.log('[LoginScreen] Refreshing agent list before opening modal');
+                            await fetchAvailableAgents();
+                            setShowAgentSelector(true);
+                          }}
+                          activeOpacity={0.7}
                         >
-                          {selectedAgent ? selectedAgent.name : "Select SCADA System"}
-                        </Text>
-                        <MaterialCommunityIcons
-                          name="chevron-down"
-                          size={22}
-                          color={theme.colors.text.secondary}
-                        />
-                      </TouchableOpacity>
-                    </View>
+                          <View style={styles.inputIconContainer}>
+                            <MaterialCommunityIcons
+                              name="server-network"
+                              size={24}
+                              color={selectedAgent ? theme.colors.primary : theme.colors.text.secondary}
+                            />
+                          </View>
+                          <Text
+                            style={[
+                              styles.input,
+                              !selectedAgent && styles.placeholderText
+                            ]}
+                          >
+                            {selectedAgent ? selectedAgent.name : "Select SCADA System"}
+                          </Text>
+                          <MaterialCommunityIcons
+                            name="chevron-down"
+                            size={22}
+                            color={theme.colors.text.secondary}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </MotiView>
                   )}
 
                   {/* Remember Me - Modern Toggle */}
-                  <View style={styles.rememberContainer}>
+                  <MotiView
+                    from={{ opacity: 0, translateY: 20 }}
+                    animate={{ opacity: 1, translateY: 0 }}
+                    transition={{ type: 'timing', duration: 400, delay: 400 }}
+                  >
+                    <View style={styles.rememberContainer}>
                     <View style={styles.rememberContent}>
                       <MaterialCommunityIcons 
                         name="bookmark-outline" 
@@ -611,10 +599,16 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
                       thumbColor={rememberMe ? theme.colors.primary : '#FFFFFF'}
                       ios_backgroundColor="rgba(0,0,0,0.1)"
                     />
-                  </View>
+                    </View>
+                  </MotiView>
 
                   {/* Login Button - Premium Design */}
-                  <TouchableOpacity
+                  <MotiView
+                    from={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ type: 'spring', damping: 10, stiffness: 100, delay: 500 }}
+                  >
+                    <TouchableOpacity
                     style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
                     onPress={handleLogin}
                     disabled={isLoading}
@@ -647,19 +641,26 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
                         </>
                       )}
                     </LinearGradient>
-                  </TouchableOpacity>
+                    </TouchableOpacity>
+                  </MotiView>
 
                   {/* Security Badge - Enhanced */}
-                  <View style={styles.securityBadge}>
-                    <View style={styles.securityBadgeContent}>
-                      <MaterialCommunityIcons 
-                        name="shield-check" 
-                        size={18} 
-                        color={theme.colors.success} 
-                      />
-                      <Text style={styles.securityText}>End-to-End Encrypted</Text>
+                  <MotiView
+                    from={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ type: 'timing', duration: 600, delay: 700 }}
+                  >
+                    <View style={styles.securityBadge}>
+                      <View style={styles.securityBadgeContent}>
+                        <MaterialCommunityIcons 
+                          name="shield-check" 
+                          size={18} 
+                          color={theme.colors.success} 
+                        />
+                        <Text style={styles.securityText}>End-to-End Encrypted</Text>
+                      </View>
                     </View>
-                  </View>
+                  </MotiView>
                 </View>
               </BlurView>
             </Animated.View>

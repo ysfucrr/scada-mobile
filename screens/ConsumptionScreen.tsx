@@ -1,10 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MotiView } from 'moti';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Alert,
-  Animated,
   Dimensions,
   FlatList,
   RefreshControl,
@@ -16,6 +17,15 @@ import {
   ToastAndroid,
   Platform
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withRepeat,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, Card, useTheme as usePaperTheme } from 'react-native-paper';
 import GradientCard from '../components/GradientCard';
@@ -75,25 +85,21 @@ export default function ConsumptionScreen() {
   const [draggedWidgetIndex, setDraggedWidgetIndex] = useState<number | undefined>(undefined);
   const [widgetOrder, setWidgetOrder] = useState<string[]>([]);
   
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const breathingAnim = useRef(new Animated.Value(1)).current;
+  // Animation values - Reanimated 3
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(50);
+  const breathingAnim = useSharedValue(1);
+
+  // Animated styles for screen transitions - Reanimated 3 (must be called before any early returns)
+  const screenStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+  }));
 
   useEffect(() => {
-    // Entry animation
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Fast entry animation - Reanimated 3
+    fadeAnim.value = withTiming(1, { duration: 150, easing: Easing.out(Easing.ease) });
+    slideAnim.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.ease) });
 
     if (isConnected) {
       loadWidgets();
@@ -114,33 +120,19 @@ export default function ConsumptionScreen() {
     }
   }, [widgets.length, isLoading]);
 
-  // Nefes alma animasyonu - widget seçildiğinde başlat
+  // Nefes alma animasyonu - widget seçildiğinde başlat - Reanimated 3
   useEffect(() => {
     if (draggedWidgetIndex !== undefined) {
-      // Animasyonu başlat
-      const breathingAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(breathingAnim, {
-            toValue: 1.05,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(breathingAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
+      breathingAnim.value = withRepeat(
+        withSequence(
+          withTiming(1.05, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        false
       );
-      breathingAnimation.start();
-
-      return () => {
-        breathingAnimation.stop();
-        breathingAnim.setValue(1);
-      };
     } else {
-      // Animasyonu durdur ve değeri sıfırla
-      breathingAnim.setValue(1);
+      breathingAnim.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
     }
   }, [draggedWidgetIndex]);
 
@@ -464,26 +456,47 @@ export default function ConsumptionScreen() {
     const liveValue = liveValues.get(item._id);
     
     if (!data || !data.comparison) {
+      const gradientColors = isDarkMode 
+        ? ['#1E3A5F', '#2D4F7C', '#3A6599'] as [string, string, ...string[]]
+        : ['#1E88E5', '#42A5F5', '#64B5F6'] as [string, string, ...string[]];
+      
       return (
-        <View style={styles.widgetWrapper}>
-          <Card style={styles.widgetCard} mode="elevated">
-            <Card.Content>
-              <Text style={[styles.widgetTitle, { color: paperTheme.colors.onSurface }]}>
-                {item.title}
-              </Text>
-              <View style={styles.noDataContainer}>
-                <MaterialCommunityIcons
-                  name="chart-line-variant"
-                  size={48}
-                  color={paperTheme.colors.outline}
-                />
-                <Text style={[styles.noDataText, { color: paperTheme.colors.onSurfaceVariant }]}>
-                  No data available
+        <MotiView
+          from={{ opacity: 0, scale: 0.95, translateY: 10 }}
+          animate={{ opacity: 1, scale: 1, translateY: 0 }}
+          transition={{ 
+            type: 'spring', 
+            damping: 18, 
+            stiffness: 90, 
+            mass: 0.8,
+            delay: index * 40 
+          }}
+          style={styles.widgetWrapper}
+        >
+          <GradientCard colors={gradientColors} style={styles.widgetCard} mode="elevated">
+            <BlurView
+              intensity={isDarkMode ? 20 : 15}
+              tint={isDarkMode ? "dark" : "light"}
+              style={styles.blurContainer}
+            >
+              <View style={styles.widgetContent}>
+                <Text style={styles.widgetTitle}>
+                  {item.title}
                 </Text>
+                <View style={styles.noDataContainer}>
+                  <MaterialCommunityIcons
+                    name="chart-line-variant"
+                    size={48}
+                    color="rgba(255,255,255,0.5)"
+                  />
+                  <Text style={styles.noDataText}>
+                    No data available
+                  </Text>
+                </View>
               </View>
-            </Card.Content>
-          </Card>
-        </View>
+            </BlurView>
+          </GradientCard>
+        </MotiView>
       );
     }
 
@@ -501,24 +514,41 @@ export default function ConsumptionScreen() {
       percentageChange = ((liveValue - comparison.previousValue) / comparison.previousValue) * 100;
     }
 
-    const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
+    const gradientColors = isDarkMode 
+      ? ['#1E3A5F', '#2D4F7C', '#3A6599'] as [string, string, ...string[]] // Professional dark blue
+      : ['#1E88E5', '#42A5F5', '#64B5F6'] as [string, string, ...string[]]; // Professional light blue
     
-    // Seçili widget için animasyonlu scale
-    const animatedStyle = draggedWidgetIndex === index
-      ? { transform: [{ scale: breathingAnim }] }
-      : {};
+    const isBeingDragged = draggedWidgetIndex === index;
     
     return (
-      <Animated.View style={[styles.widgetWrapper, animatedStyle]}>
-        <GradientCard
-          colors={gradientColors}
-          style={{
-            ...styles.widgetCard,
-            ...(draggedWidgetIndex === index ? styles.beingDragged : {}),
-            ...(draggedWidgetIndex !== undefined && draggedWidgetIndex !== index ? styles.dropTarget : {})
-          }}
-          mode="elevated"
-        >
+      <MotiView
+        from={{ opacity: 0, scale: 0.95, translateY: 10 }}
+        animate={{ 
+          opacity: 1, 
+          scale: isBeingDragged ? 1.05 : 1, 
+          translateY: 0 
+        }}
+        transition={{ 
+          type: 'spring', 
+          damping: 18, 
+          stiffness: 90, 
+          mass: 0.8,
+          delay: index * 40,
+          loop: isBeingDragged ? true : false,
+          repeatReverse: true
+        }}
+        style={styles.widgetWrapper}
+      >
+        <View>
+          <GradientCard
+            colors={gradientColors}
+            style={{
+              ...styles.widgetCard,
+              ...(draggedWidgetIndex === index ? styles.beingDragged : {}),
+              ...(draggedWidgetIndex !== undefined && draggedWidgetIndex !== index ? styles.dropTarget : {})
+            }}
+            mode="elevated"
+          >
           <BlurView
             intensity={isDarkMode ? 20 : 15}
             tint={isDarkMode ? "dark" : "light"}
@@ -783,7 +813,8 @@ export default function ConsumptionScreen() {
             </View>
           </BlurView>
         </GradientCard>
-      </Animated.View>
+        </View>
+      </MotiView>
     );
   };
 
@@ -839,13 +870,17 @@ export default function ConsumptionScreen() {
     <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
       
-      <Animated.View
-        style={{
-          flex: 1,
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        }}
-      >
+      {/* Modern Gradient Background */}
+      <LinearGradient
+        colors={isDarkMode 
+          ? ['#0D1B2A', '#1B263B', '#415A77', '#778DA9']
+          : ['#E3F2FD', '#BBDEFB', '#90CAF9', '#64B5F6']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      
+      <Animated.View style={[{ flex: 1 }, screenStyle]}>
         <FlatList
           key={`consumption-${isLandscape ? 'landscape' : 'portrait'}`}
           data={widgets}

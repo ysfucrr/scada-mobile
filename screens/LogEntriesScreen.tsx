@@ -1,4 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, useCallback } from 'react';
 import {
@@ -12,6 +14,15 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedScrollHandler,
+  withSpring,
+  withTiming,
+  Easing,
+  interpolate,
+} from 'react-native-reanimated';
 import SwipeGestureRecognizer from 'react-native-swipe-gestures';
 import {
   ActivityIndicator,
@@ -97,6 +108,12 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+
+  // Scroll animation for filter section
+  const scrollY = useSharedValue(0);
+  const lastScrollY = useSharedValue(0);
+  const filterTranslateY = useSharedValue(0);
+  const targetTranslateY = useSharedValue(0);
   
   // Load log entries
   const loadEntries = async () => {
@@ -397,6 +414,74 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
     loadTodayEntries();
   }, [trendLog._id]); // Only run once when component mounts
 
+  // Scroll handler for hiding/showing filter section
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const currentScrollY = event.contentOffset.y;
+      
+      // Threshold values for showing/hiding filter section
+      const hideThreshold = 100; // Hide when scrolled down more than 100px
+      const showThreshold = 50; // Show when scrolled up to less than 50px
+      
+      // Determine target translateY value based on scroll position
+      let newTarget = targetTranslateY.value;
+      
+      if (currentScrollY <= 0) {
+        newTarget = 0;
+      } else if (currentScrollY > hideThreshold) {
+        newTarget = -200; // Hide filter section (adjust based on filter height)
+      } else if (currentScrollY < showThreshold) {
+        newTarget = 0;
+      } else {
+        // Between thresholds - keep current target to avoid jitter
+        newTarget = targetTranslateY.value;
+      }
+      
+      // Only start new animation if target changed (with small threshold to avoid jitter)
+      const targetDiff = Math.abs(newTarget - targetTranslateY.value);
+      if (targetDiff > 1) {
+        targetTranslateY.value = newTarget;
+        
+        // Use spring animation for smooth transition
+        filterTranslateY.value = withSpring(newTarget, {
+          damping: 30,
+          stiffness: 120,
+          mass: 0.5,
+        });
+      }
+      
+      scrollY.value = currentScrollY;
+      lastScrollY.value = currentScrollY;
+    },
+  });
+
+  // Animated style for filter section
+  const filterSectionStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      filterTranslateY.value,
+      [-200, 0],
+      [0, 1],
+      'clamp'
+    );
+    return {
+      transform: [{ translateY: filterTranslateY.value }],
+      opacity,
+    };
+  });
+
+  // Animated style for scroll spacer (to prevent dead space when filter is hidden)
+  const scrollSpacerStyle = useAnimatedStyle(() => {
+    const height = interpolate(
+      filterTranslateY.value,
+      [-200, 0],
+      [0, 150], // Approximate height of filter section + spacing
+      'clamp'
+    );
+    return {
+      height,
+    };
+  });
+
   const swipeConfig = {
     velocityThreshold: 0.3,
     directionalOffsetThreshold: 80,
@@ -411,55 +496,143 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
     >
       <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
         <StatusBar style={isDarkMode ? "light" : "dark"} />
-        
+        <LinearGradient
+          colors={isDarkMode 
+            ? ['#0D1B2A', '#1B263B', '#415A77'] 
+            : ['#E3F2FD', '#BBDEFB', '#90CAF9']}
+          style={StyleSheet.absoluteFillObject}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
         {/* Date Filter Section */}
-      <Surface style={styles.filterSection} elevation={1}>
-        <View style={styles.dateFilterRow}>
-          <View style={styles.dateInputContainer}>
-            <PaperText variant="labelMedium">Start Date:</PaperText>
-            <Button
-              mode="outlined"
-              onPress={() => showDatePicker(true)}
-              icon="calendar"
-              style={styles.dateButton}
-            >
-              {formatDate(startDate)}
-            </Button>
+      <Animated.View style={[styles.filterSectionWrapper, filterSectionStyle]}>
+        <BlurView
+          intensity={isDarkMode ? 30 : 20}
+          tint={isDarkMode ? "dark" : "light"}
+          style={styles.filterSection}
+        >
+          <View style={styles.filterContent}>
+            <View style={styles.dateFilterRow}>
+              <View style={styles.dateInputContainer}>
+                <View style={styles.dateLabelContainer}>
+                  <PaperText variant="labelMedium" style={styles.dateLabel}>
+                    Start Date
+                  </PaperText>
+                </View>
+                <TouchableOpacity
+                  onPress={() => showDatePicker(true)}
+                  style={[
+                    styles.dateButton,
+                    { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.9)' }
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons
+                    name="calendar"
+                    size={20}
+                    color={isDarkMode ? '#64B5F6' : '#1976D2'}
+                  />
+                  <PaperText
+                    variant="bodyMedium"
+                    style={[
+                      styles.dateButtonText,
+                      { color: isDarkMode ? '#E3F2FD' : '#1976D2' }
+                    ]}
+                  >
+                    {formatDate(startDate)}
+                  </PaperText>
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.dateInputContainer}>
+                <View style={styles.dateLabelContainer}>
+                  <PaperText variant="labelMedium" style={styles.dateLabel}>
+                    End Date
+                  </PaperText>
+                </View>
+                <TouchableOpacity
+                  onPress={() => showDatePicker(false)}
+                  style={[
+                    styles.dateButton,
+                    { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.9)' }
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons
+                    name="calendar"
+                    size={20}
+                    color={isDarkMode ? '#64B5F6' : '#1976D2'}
+                  />
+                  <PaperText
+                    variant="bodyMedium"
+                    style={[
+                      styles.dateButtonText,
+                      { color: isDarkMode ? '#E3F2FD' : '#1976D2' }
+                    ]}
+                  >
+                    {formatDate(endDate)}
+                  </PaperText>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                onPress={resetDates}
+                style={[
+                  styles.resetButton,
+                  { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.7)' }
+                ]}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="refresh"
+                  size={20}
+                  color={isDarkMode ? '#90CAF9' : '#1976D2'}
+                />
+                <PaperText
+                  variant="labelLarge"
+                  style={[
+                    styles.resetButtonText,
+                    { color: isDarkMode ? '#E3F2FD' : '#1976D2' }
+                  ]}
+                >
+                  Reset
+                </PaperText>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                onPress={searchByDateRange}
+                style={[
+                  styles.searchButton,
+                  {
+                    backgroundColor: isDarkMode ? '#1976D2' : '#1976D2',
+                    opacity: isLoading ? 0.7 : 1
+                  }
+                ]}
+                activeOpacity={0.8}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="magnify"
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                )}
+                <PaperText
+                  variant="labelLarge"
+                  style={styles.searchButtonText}
+                >
+                  {isLoading ? 'Searching...' : 'Search'}
+                </PaperText>
+              </TouchableOpacity>
+            </View>
           </View>
-          
-          <View style={styles.dateInputContainer}>
-            <PaperText variant="labelMedium">End Date:</PaperText>
-            <Button
-              mode="outlined"
-              onPress={() => showDatePicker(false)}
-              icon="calendar"
-              style={styles.dateButton}
-            >
-              {formatDate(endDate)}
-            </Button>
-          </View>
-        </View>
-        
-        <View style={styles.actionButtons}>
-          <Button 
-            mode="text"
-            onPress={resetDates}
-            icon="refresh"
-          >
-            Reset
-          </Button>
-          
-          <Button 
-            mode="contained"
-            onPress={searchByDateRange}
-            icon="magnify"
-            loading={isLoading}
-            style={{marginLeft: 8}}
-          >
-            Search
-          </Button>
-        </View>
-      </Surface>
+        </BlurView>
+      </Animated.View>
       
       {/* Calendar Modal */}
       <Modal
@@ -556,7 +729,7 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
       </Modal>
       
       {/* Log Entries List */}
-      <FlatList
+      <Animated.FlatList
         data={entries}
         renderItem={({ item, index }) => (
           <LogEntryCard
@@ -570,11 +743,16 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
         )}
         keyExtractor={(item) => item._id}
         contentContainerStyle={styles.listContent}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        ListHeaderComponent={<Animated.View style={scrollSpacerStyle} />}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             colors={[paperTheme.colors.primary]}
+            progressViewOffset={170}
+            tintColor={paperTheme.colors.primary}
           />
         }
         ListEmptyComponent={
@@ -648,30 +826,114 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  filterSectionWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+  },
   filterSection: {
     padding: 16,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    overflow: 'hidden',
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  filterContent: {
+    backgroundColor: 'transparent',
   },
   dateFilterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16,
+    gap: 12,
   },
   dateInputContainer: {
     flex: 1,
-    marginRight: 8,
+  },
+  dateLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  dateLabel: {
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
   dateButton: {
-    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dateButtonText: {
+    flex: 1,
+    fontWeight: '500',
   },
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  resetButtonText: {
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: '#1976D2',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  searchButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   listContent: {
     padding: 16,
-    paddingTop: 8,
+    paddingTop: 24,
     flexGrow: 1,
   },
   modalContainer: {

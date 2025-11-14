@@ -1,11 +1,12 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MotiView } from 'moti';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  Animated,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -15,6 +16,12 @@ import {
   Modal,
   ScrollView
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 import { ActivityIndicator, useTheme as usePaperTheme } from 'react-native-paper';
 import GradientCard from '../components/GradientCard';
 import { useConnection } from '../context/ConnectionContext';
@@ -67,23 +74,26 @@ export default function PeriodicReportsScreen() {
   } | null>(null);
   const [generatingReport, setGeneratingReport] = useState<string | null>(null);
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const expandAnims = useRef(new Map<string, Animated.Value>()).current;
+  // Animation values - Reanimated 3
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(50);
+
+  // Animated styles for screen transitions - Reanimated 3 (must be called before any early returns)
+  const screenStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+  }), []);
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Entry animation - Reanimated 3
+    fadeAnim.value = withTiming(1, {
+      duration: 150,
+      easing: Easing.out(Easing.ease),
+    });
+    slideAnim.value = withTiming(0, {
+      duration: 150,
+      easing: Easing.out(Easing.ease),
+    });
 
     if (isConnected) {
       loadReports();
@@ -91,7 +101,7 @@ export default function PeriodicReportsScreen() {
       setReports([]);
       setIsLoading(false);
     }
-  }, [isConnected]);
+  }, [isConnected, fadeAnim, slideAnim]);
 
   const loadReports = async () => {
     if (!isConnected) return;
@@ -99,13 +109,6 @@ export default function PeriodicReportsScreen() {
     try {
       const data = await ApiService.getPeriodicReports();
       setReports(data);
-      
-      // Initialize expand animations for each report
-      data.forEach(report => {
-        if (!expandAnims.has(report._id)) {
-          expandAnims.set(report._id, new Animated.Value(0));
-        }
-      });
     } catch (error) {
       console.error('Error loading periodic reports:', error);
       Alert.alert('Error', 'Failed to load periodic reports');
@@ -127,17 +130,7 @@ export default function PeriodicReportsScreen() {
   const toggleReport = (reportId: string) => {
     const isExpanding = expandedReport !== reportId;
     setExpandedReport(isExpanding ? reportId : null);
-    
-    // Animate expansion/collapse
-    const animValue = expandAnims.get(reportId);
-    if (animValue) {
-      Animated.spring(animValue, {
-        toValue: isExpanding ? 1 : 0,
-        useNativeDriver: false,
-        tension: 65,
-        friction: 11,
-      }).start();
-    }
+    // No animation - instant expand/collapse
   };
 
   const formatFrequency = (report: PeriodicReportType) => {
@@ -280,83 +273,74 @@ export default function PeriodicReportsScreen() {
     }
   };
 
-  const renderReportItem = ({ item: report }: { item: PeriodicReportType }) => {
+  const renderReportItem = ({ item: report, index }: { item: PeriodicReportType; index: number }) => {
     const isExpanded = expandedReport === report._id;
-    const expandAnim = expandAnims.get(report._id) || new Animated.Value(0);
-    const rotateAnim = expandAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: ['0deg', '180deg'],
-    });
-
-    const maxHeight = expandAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, 200],
-    });
-
     const isGenerating = generatingReport === report._id;
+    const gradientColors = isDarkMode 
+      ? ['#1A237E', '#283593', '#3949AB'] as [string, string, ...string[]]
+      : ['#1E88E5', '#42A5F5', '#64B5F6'] as [string, string, ...string[]];
 
     return (
-      <GradientCard
-        colors={isDarkMode ? ['#263238', '#37474F'] : ['#1E88E5', '#42A5F5']}
+      <MotiView
+        from={{ opacity: 0, scale: 0.95, translateY: 10 }}
+        animate={{ opacity: 1, scale: 1, translateY: 0 }}
+        transition={{ type: 'spring', damping: 18, stiffness: 90, mass: 0.8, delay: index * 40 }}
         style={styles.reportCard}
-        mode="elevated"
       >
-        <BlurView
-          intensity={isDarkMode ? 30 : 20}
-          tint={isDarkMode ? "dark" : "light"}
-          style={styles.blurContainer}
+        <GradientCard
+          colors={gradientColors}
+          style={styles.reportCardInner}
+          mode="elevated"
         >
-          {/* Header */}
-          <TouchableOpacity
-            onPress={() => toggleReport(report._id)}
-            activeOpacity={0.9}
-            style={styles.reportHeader}
+          <BlurView
+            intensity={isDarkMode ? 30 : 20}
+            tint={isDarkMode ? "dark" : "light"}
+            style={styles.blurContainer}
           >
-            <View style={styles.headerLeft}>
-              <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
+            {/* Header */}
+            <TouchableOpacity
+              onPress={() => toggleReport(report._id)}
+              activeOpacity={1}
+              style={styles.reportHeader}
+            >
+              <View style={styles.headerLeft}>
+                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
+                  <MaterialCommunityIcons
+                    name="file-document-outline"
+                    size={24}
+                    color="#FFFFFF"
+                  />
+                </View>
+                <View style={styles.headerTextContainer}>
+                  <Text style={styles.reportDescription}>{report.description || 'Periodic Report'}</Text>
+                  <View style={styles.badgeContainer}>
+                    <View style={[styles.badge, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
+                      <Text style={styles.badgeText}>{report.format.toUpperCase()}</Text>
+                    </View>
+                    {report.active ? (
+                      <View style={[styles.badge, { backgroundColor: 'rgba(76, 175, 80, 0.3)' }]}>
+                        <Text style={[styles.badgeText, { color: '#4CAF50' }]}>Active</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.badge, { backgroundColor: 'rgba(158, 158, 158, 0.3)' }]}>
+                        <Text style={[styles.badgeText, { color: '#9E9E9E' }]}>Inactive</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+              <View style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}>
                 <MaterialCommunityIcons
-                  name="file-document-outline"
-                  size={24}
+                  name="chevron-down"
+                  size={28}
                   color="#FFFFFF"
                 />
               </View>
-              <View style={styles.headerTextContainer}>
-                <Text style={styles.reportDescription}>{report.description || 'Periodic Report'}</Text>
-                <View style={styles.badgeContainer}>
-                  <View style={[styles.badge, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
-                    <Text style={styles.badgeText}>{report.format.toUpperCase()}</Text>
-                  </View>
-                  {report.active ? (
-                    <View style={[styles.badge, { backgroundColor: 'rgba(76, 175, 80, 0.3)' }]}>
-                      <Text style={[styles.badgeText, { color: '#4CAF50' }]}>Active</Text>
-                    </View>
-                  ) : (
-                    <View style={[styles.badge, { backgroundColor: 'rgba(158, 158, 158, 0.3)' }]}>
-                      <Text style={[styles.badgeText, { color: '#9E9E9E' }]}>Inactive</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-            <Animated.View style={{ transform: [{ rotate: rotateAnim }] }}>
-              <MaterialCommunityIcons
-                name="chevron-down"
-                size={28}
-                color="#FFFFFF"
-              />
-            </Animated.View>
-          </TouchableOpacity>
+            </TouchableOpacity>
 
-          {/* Expanded Content */}
-          <Animated.View
-            style={[
-              styles.expandedContent,
-              {
-                height: maxHeight,
-                opacity: expandAnim,
-              }
-            ]}
-          >
+            {/* Expanded Content */}
+            {isExpanded && (
+            <View style={styles.expandedContent}>
             <View style={styles.contentInner}>
               {/* Schedule Info */}
               <View style={styles.infoSection}>
@@ -430,9 +414,11 @@ export default function PeriodicReportsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </Animated.View>
+          </View>
+          )}
         </BlurView>
       </GradientCard>
+    </MotiView>
     );
   };
 
@@ -451,26 +437,30 @@ export default function PeriodicReportsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
-      
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
+      <LinearGradient
+        colors={isDarkMode 
+          ? ['#0D1B2A', '#1B263B', '#415A77'] 
+          : ['#E3F2FD', '#BBDEFB', '#90CAF9']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      <Animated.View style={[styles.content, screenStyle]}>
         <FlatList
           data={reports}
           renderItem={renderReportItem}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            reports.length === 0 && styles.listContentEmpty
+          ]}
+          style={styles.list}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
               tintColor={paperTheme.colors.primary}
+              colors={[paperTheme.colors.primary]}
             />
           }
           ListEmptyComponent={
@@ -485,6 +475,8 @@ export default function PeriodicReportsScreen() {
               </Text>
             </View>
           }
+          scrollEnabled={true}
+          nestedScrollEnabled={false}
         />
       </Animated.View>
 
@@ -636,8 +628,17 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  list: {
+    flex: 1,
+  },
   listContent: {
     padding: 16,
+    flexGrow: 1,
+  },
+  listContentEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingText: {
     marginTop: 16,
@@ -645,6 +646,8 @@ const styles = StyleSheet.create({
   },
   reportCard: {
     marginBottom: 16,
+  },
+  reportCardInner: {
     borderRadius: 16,
     overflow: 'hidden',
   },

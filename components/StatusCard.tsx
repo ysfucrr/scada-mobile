@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { MotiView } from 'moti';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Chip, Text, useTheme } from 'react-native-paper';
@@ -42,7 +43,12 @@ const StatusCard: React.FC<StatusCardProps> = ({
   };
 
   return (
-    <View style={styles.cardWrapper}>
+    <MotiView
+      from={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ type: 'spring', damping: 12, stiffness: 100 }}
+      style={styles.cardWrapper}
+    >
       <GradientCard
         colors={getGradientColors()}
         style={styles.card}
@@ -115,7 +121,7 @@ const StatusCard: React.FC<StatusCardProps> = ({
           </View>
         </BlurView>
       </GradientCard>
-    </View>
+    </MotiView>
   );
 };
 

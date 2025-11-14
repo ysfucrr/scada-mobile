@@ -1,9 +1,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import { MotiView } from 'moti';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, AppState, AppStateStatus, Dimensions, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Alert, AppState, AppStateStatus, Dimensions, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import Animated, { 
+  useSharedValue, 
+  useAnimatedStyle, 
+  withTiming, 
+  withSpring, 
+  withRepeat, 
+  withSequence,
+  withDelay,
+  interpolate,
+  Easing,
+  runOnJS,
+  SharedValue
+} from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   Appbar,
@@ -14,7 +29,7 @@ import {
   Text,
   useTheme as usePaperTheme
 } from 'react-native-paper';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Screens
 import BillingScreen from './screens/BillingScreen';
@@ -74,6 +89,61 @@ const PaperProviderWithTheme: React.FC<{ children: React.ReactNode }> = ({ child
   );
 };
 
+// Helper components for particles and lines to avoid hooks rule violations
+const AnimatedLine = React.memo(({ line, index, width }: { line: { translateY: SharedValue<number>, opacity: SharedValue<number> }, index: number, width: number }) => {
+  const lineStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: line.translateY.value }],
+    opacity: line.opacity.value,
+  }));
+  return (
+    <Animated.View
+      style={[
+        {
+          position: 'absolute',
+          width: 2,
+          height: 60,
+          backgroundColor: 'rgba(66, 165, 245, 0.4)',
+          borderRadius: 1,
+          left: (width / 9) * (index + 1),
+        },
+        lineStyle,
+      ]}
+    />
+  );
+});
+
+const AnimatedParticle = React.memo(({ particle, index }: { particle: { translateX: SharedValue<number>, translateY: SharedValue<number>, scale: SharedValue<number>, opacity: SharedValue<number> }, index: number }) => {
+  const particleStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: particle.translateX.value },
+      { translateY: particle.translateY.value },
+      { scale: particle.scale.value },
+    ],
+    opacity: particle.opacity.value,
+  }));
+  return (
+    <Animated.View style={[
+      {
+        position: 'absolute',
+        width: 24,
+        height: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+        left: 0,
+        top: 0,
+      },
+      particleStyle
+    ]}>
+      <Text style={{
+        fontSize: 12,
+        fontWeight: '700',
+        color: 'rgba(255, 255, 255, 0.9)',
+        fontFamily: 'monospace',
+      }}>{index % 2 === 0 ? '0' : '1'}</Text>
+    </Animated.View>
+  );
+});
+
 // Main App component with navigation logic
 function MainApp() {
   const { theme, isDarkMode, toggleTheme } = useTheme();
@@ -81,6 +151,7 @@ function MainApp() {
   const { isConnected, connect } = useConnection();
   const { isConnected: wsConnected, connectionState: wsConnectionState } = useWebSocket();
   const { isLandscape, screenWidth } = useOrientation();
+  const insets = useSafeAreaInsets();
   
   const [currentScreen, setCurrentScreen] = useState('Settings');
   const [isMenuVisible, setIsMenuVisible] = useState(false);
@@ -100,25 +171,26 @@ function MainApp() {
   const backgroundTimeRef = useRef<number | null>(null);
   const SESSION_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
   
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const menuSlideAnim = useRef(new Animated.Value(-300)).current;
-  const menuFadeAnim = useRef(new Animated.Value(0)).current;
+  // Animation values - Reanimated 3
+  const fadeAnim = useSharedValue(1);
+  const slideAnim = useSharedValue(0);
+  const menuSlideAnim = useSharedValue(-screenWidth);
+  const menuFadeAnim = useSharedValue(0);
+  const menuScaleAnim = useSharedValue(0.95);
   
-  // Modern Splash Screen Animations - Ultra Modern Design
-  const splashFadeAnim = useRef(new Animated.Value(0)).current;
-  const logoScaleAnim = useRef(new Animated.Value(0.5)).current;
-  const logoRotateAnim = useRef(new Animated.Value(0)).current;
-  const geometricShape1Anim = useRef(new Animated.Value(0)).current;
-  const geometricShape2Anim = useRef(new Animated.Value(0)).current;
-  const geometricShape3Anim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const textFadeAnim = useRef(new Animated.Value(0)).current;
-  const textSlideAnim = useRef(new Animated.Value(50)).current;
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  // Modern Splash Screen Animations - Reanimated 3
+  const splashFadeAnim = useSharedValue(0);
+  const logoScaleAnim = useSharedValue(0.5);
+  const logoRotateAnim = useSharedValue(0);
+  const geometricShape1Anim = useSharedValue(0);
+  const geometricShape2Anim = useSharedValue(0);
+  const geometricShape3Anim = useSharedValue(0);
+  const pulseAnim = useSharedValue(1);
+  const textFadeAnim = useSharedValue(0);
+  const textSlideAnim = useSharedValue(50);
+  const progressAnim = useSharedValue(0);
   
-  // Floating particles - using translateX/Y instead of left/top
+  // Floating particles - Reanimated 3
   const floatingParticles = useRef(
     Array.from({ length: 15 }, () => {
       const startX = Math.random() * width;
@@ -126,182 +198,113 @@ function MainApp() {
       return {
         startX,
         startY,
-        translateX: useRef(new Animated.Value(startX)).current,
-        translateY: useRef(new Animated.Value(startY)).current,
-        opacity: useRef(new Animated.Value(0)).current,
-        scale: useRef(new Animated.Value(0.5)).current,
+        translateX: useSharedValue(startX),
+        translateY: useSharedValue(startY),
+        opacity: useSharedValue(0),
+        scale: useSharedValue(0.5),
       };
     })
   ).current;
   
-  // Data stream lines
+  // Data stream lines - Reanimated 3
   const dataLines = useRef(
     Array.from({ length: 8 }, () => ({
-      translateY: useRef(new Animated.Value(0)).current,
-      opacity: useRef(new Animated.Value(0)).current,
+      translateY: useSharedValue(0),
+      opacity: useSharedValue(0),
     }))
   ).current;
 
   useEffect(() => {
-    // Ultra Modern Animation Sequence
+    // Ultra Modern Animation Sequence - Reanimated 3
     // 1. Background fade in
-    Animated.timing(splashFadeAnim, {
-      toValue: 1,
-      duration: 800,
-      useNativeDriver: true,
-    }).start();
+    splashFadeAnim.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.ease) });
 
     // 2. Logo scale and rotation
-    Animated.parallel([
-      Animated.spring(logoScaleAnim, {
-        toValue: 1,
-        tension: 40,
-        friction: 6,
-        useNativeDriver: true,
-      }),
-      Animated.loop(
-        Animated.timing(logoRotateAnim, {
-          toValue: 1,
-          duration: 10000,
-          useNativeDriver: true,
-        })
-      ),
-    ]).start();
+    logoScaleAnim.value = withSpring(1, { damping: 6, stiffness: 40 });
+    logoRotateAnim.value = withRepeat(
+      withTiming(1, { duration: 10000, easing: Easing.linear }),
+      -1,
+      false
+    );
 
     // 3. Geometric shapes animation
-    Animated.stagger(200, [
-      Animated.spring(geometricShape1Anim, {
-        toValue: 1,
-        tension: 30,
-        friction: 5,
-        useNativeDriver: true,
-      }),
-      Animated.spring(geometricShape2Anim, {
-        toValue: 1,
-        tension: 30,
-        friction: 5,
-        useNativeDriver: true,
-      }),
-      Animated.spring(geometricShape3Anim, {
-        toValue: 1,
-        tension: 30,
-        friction: 5,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    geometricShape1Anim.value = withDelay(0, withSpring(1, { damping: 5, stiffness: 30 }));
+    geometricShape2Anim.value = withDelay(200, withSpring(1, { damping: 5, stiffness: 30 }));
+    geometricShape3Anim.value = withDelay(400, withSpring(1, { damping: 5, stiffness: 30 }));
 
     // 4. Pulse animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
+    pulseAnim.value = withRepeat(
+      withSequence(
+        withTiming(1.1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
 
     // 5. Text animations
-    Animated.parallel([
-      Animated.timing(textFadeAnim, {
-        toValue: 1,
-        duration: 800,
-        delay: 800,
-        useNativeDriver: true,
-      }),
-      Animated.spring(textSlideAnim, {
-        toValue: 0,
-        tension: 40,
-        friction: 8,
-        delay: 800,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    textFadeAnim.value = withDelay(800, withTiming(1, { duration: 800, easing: Easing.out(Easing.ease) }));
+    textSlideAnim.value = withDelay(800, withSpring(0, { damping: 8, stiffness: 40 }));
 
-    // 5. Floating particles
+    // 6. Floating particles
     floatingParticles.forEach((particle, index) => {
-      Animated.parallel([
-        Animated.sequence([
-          Animated.delay(index * 100),
-          Animated.timing(particle.opacity, {
-            toValue: 0.7,
-            duration: 800,
-            useNativeDriver: true,
+      particle.opacity.value = withDelay(
+        index * 100,
+        withTiming(0.7, { duration: 800, easing: Easing.out(Easing.ease) })
+      );
+      
+      particle.translateY.value = withRepeat(
+        withSequence(
+          withTiming(particle.startY + (Math.random() * 200 - 100), {
+            duration: 3000 + Math.random() * 2000,
+            easing: Easing.inOut(Easing.ease)
           }),
-        ]),
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(particle.translateY, {
-              toValue: particle.startY + (Math.random() * 200 - 100),
-              duration: 3000 + Math.random() * 2000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(particle.translateY, {
-              toValue: particle.startY - (Math.random() * 200 - 100),
-              duration: 3000 + Math.random() * 2000,
-              useNativeDriver: true,
-            }),
-          ])
+          withTiming(particle.startY - (Math.random() * 200 - 100), {
+            duration: 3000 + Math.random() * 2000,
+            easing: Easing.inOut(Easing.ease)
+          })
         ),
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(particle.scale, {
-              toValue: 1.2,
-              duration: 2000,
-              useNativeDriver: true,
-            }),
-            Animated.timing(particle.scale, {
-              toValue: 0.8,
-              duration: 2000,
-              useNativeDriver: true,
-            }),
-          ])
+        -1,
+        false
+      );
+      
+      particle.scale.value = withRepeat(
+        withSequence(
+          withTiming(1.2, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+          withTiming(0.8, { duration: 2000, easing: Easing.inOut(Easing.ease) })
         ),
-      ]).start();
+        -1,
+        false
+      );
     });
 
-    // 6. Data stream lines
+    // 7. Data stream lines
     dataLines.forEach((line, index) => {
-      Animated.sequence([
-        Animated.delay(1000 + index * 150),
-        Animated.parallel([
-          Animated.timing(line.opacity, {
-            toValue: 0.6,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.loop(
-            Animated.timing(line.translateY, {
-              toValue: height,
-              duration: 2000 + index * 200,
-              useNativeDriver: true,
-            })
-          ),
-        ]),
-      ]).start();
+      line.opacity.value = withDelay(
+        1000 + index * 150,
+        withTiming(0.6, { duration: 500, easing: Easing.out(Easing.ease) })
+      );
+      
+      line.translateY.value = withRepeat(
+        withTiming(height, {
+          duration: 2000 + index * 200,
+          easing: Easing.linear
+        }),
+        -1,
+        false
+      );
     });
 
-    // 7. Progress bar animation
-    Animated.timing(progressAnim, {
-      toValue: 1,
-      duration: 3000,
-      delay: 1200,
-      useNativeDriver: true,
-    }).start();
+    // 8. Progress bar animation
+    progressAnim.value = withDelay(
+      1200,
+      withTiming(1, { duration: 3000, easing: Easing.out(Easing.ease) })
+    );
 
     // Hide splash after animation completes
     const splashTimer = setTimeout(() => {
-      Animated.timing(splashFadeAnim, {
-        toValue: 0,
-        duration: 400,
-        useNativeDriver: true,
-      }).start(() => {
-        setShowSplash(false);
+      splashFadeAnim.value = withTiming(0, { duration: 400, easing: Easing.in(Easing.ease) }, () => {
+        runOnJS(setShowSplash)(false);
       });
     }, 4800);
 
@@ -618,27 +621,40 @@ function MainApp() {
     }
   };
 
+  // Animated styles for splash screen - Reanimated 3
+  const splashContentStyle = useAnimatedStyle(() => ({
+    opacity: splashFadeAnim.value,
+  }));
+
+  const textContainerStyle = useAnimatedStyle(() => ({
+    opacity: textFadeAnim.value,
+    transform: [{ translateY: textSlideAnim.value }],
+  }));
+
+  const progressBarStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: progressAnim.value }],
+  }));
+
+  // Animated styles for menu
+  const menuWrapperStyle = useAnimatedStyle(() => ({
+    opacity: menuFadeAnim.value,
+  }));
+
+  const menuContainerStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: menuSlideAnim.value },
+      { scale: menuScaleAnim.value }
+    ],
+  }));
+
+  // Animated styles for screen transitions
+  const screenWrapperStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+  }));
+
+
   if (showSplash) {
-    // Interpolated values
-    const logoRotation = logoRotateAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: ['0deg', '360deg'],
-    });
-
-    const shape1Rotation = geometricShape1Anim.interpolate({
-      inputRange: [0, 1],
-      outputRange: ['0deg', '360deg'],
-    });
-
-    const shape2Rotation = geometricShape2Anim.interpolate({
-      inputRange: [0, 1],
-      outputRange: ['0deg', '-360deg'],
-    });
-
-    const shape3Rotation = geometricShape3Anim.interpolate({
-      inputRange: [0, 1],
-      outputRange: ['0deg', '180deg'],
-    });
 
     return (
       <View style={styles.splashContainer}>
@@ -652,74 +668,27 @@ function MainApp() {
         
         {/* Data Stream Lines Background */}
         {dataLines.map((line, index) => (
-          <Animated.View
-            key={`line-${index}`}
-            style={[
-              styles.dataStreamLine,
-              {
-                left: (width / 9) * (index + 1),
-                transform: [{ translateY: line.translateY }],
-                opacity: line.opacity,
-              },
-            ]}
-          />
+          <AnimatedLine key={`line-${index}`} line={line} index={index} width={width} />
         ))}
         
         {/* Floating Particles */}
         {floatingParticles.map((particle, index) => (
-          <Animated.View
-            key={`particle-${index}`}
-            style={[
-              styles.floatingParticle,
-              {
-                transform: [
-                  { translateX: particle.translateX },
-                  { translateY: particle.translateY },
-                  { scale: particle.scale },
-                ],
-                opacity: particle.opacity,
-              },
-            ]}
-          >
-            <Text style={styles.particleText}>{index % 2 === 0 ? '0' : '1'}</Text>
-          </Animated.View>
+          <AnimatedParticle key={`particle-${index}`} particle={particle} index={index} />
         ))}
         
         <StatusBar style="light" />
         
-        <Animated.View
-          style={[
-            styles.splashContent,
-            {
-              opacity: splashFadeAnim,
-            },
-          ]}
-        >
+        <Animated.View style={[styles.splashContent, splashContentStyle]}>
           {/* Modern Title & Subtitle */}
-          <Animated.View
-            style={{
-              opacity: textFadeAnim,
-              transform: [{ translateY: textSlideAnim }],
-              alignItems: 'center',
-            }}
-          >
+          <Animated.View style={[textContainerStyle, { alignItems: 'center' }]}>
             <Text style={styles.ultraModernTitle}>SCADA Mobile</Text>
             <Text style={styles.ultraModernSubtitle}>NEXT GENERATION CONTROL</Text>
           </Animated.View>
           
           {/* Ultra Modern Progress Indicator */}
-          <Animated.View style={[styles.ultraModernLoadingContainer, { opacity: textFadeAnim }]}>
+          <Animated.View style={[styles.ultraModernLoadingContainer, textContainerStyle]}>
             <View style={styles.ultraModernLoadingBar}>
-              <Animated.View
-                style={[
-                  styles.ultraModernLoadingProgress,
-                  {
-                    transform: [{
-                      scaleX: progressAnim,
-                    }],
-                  },
-                ]}
-              />
+              <Animated.View style={[styles.ultraModernLoadingProgress, progressBarStyle]} />
             </View>
             <Text style={styles.ultraModernLoadingText}>CHECKING SERVER CONNECTION</Text>
           </Animated.View>
@@ -811,39 +780,13 @@ function MainApp() {
         setLogEntryTitle(null);
       }
       
-      // Animate screen transition
-      Animated.sequence([
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: -50,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.timing(slideAnim, {
-          toValue: 50,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setCurrentScreen(screenName);
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-        ]).start();
+      // Animate screen transition - Reanimated 3
+      fadeAnim.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.ease) });
+      slideAnim.value = withTiming(-50, { duration: 150, easing: Easing.out(Easing.ease) }, () => {
+        runOnJS(setCurrentScreen)(screenName);
+        slideAnim.value = 50;
+        fadeAnim.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
+        slideAnim.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) });
       });
       
       // Close menu with animation
@@ -853,34 +796,43 @@ function MainApp() {
   
   const openMenu = () => {
     setIsMenuVisible(true);
-    Animated.parallel([
-      Animated.timing(menuSlideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(menuFadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Smooth spring animation with scale effect
+    menuSlideAnim.value = -screenWidth;
+    menuFadeAnim.value = 0;
+    menuScaleAnim.value = 0.95;
+    
+    // Use spring for natural, smooth movement
+    menuSlideAnim.value = withSpring(0, {
+      damping: 20,
+      stiffness: 90,
+      mass: 0.8,
+    });
+    menuFadeAnim.value = withSpring(1, {
+      damping: 20,
+      stiffness: 90,
+      mass: 0.8,
+    });
+    menuScaleAnim.value = withSpring(1, {
+      damping: 18,
+      stiffness: 100,
+      mass: 0.7,
+    });
   };
   
   const closeMenu = () => {
-    Animated.parallel([
-      Animated.timing(menuSlideAnim, {
-        toValue: -300,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(menuFadeAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setIsMenuVisible(false);
+    menuSlideAnim.value = withTiming(-screenWidth, { 
+      duration: 200, 
+      easing: Easing.in(Easing.ease) 
+    });
+    menuFadeAnim.value = withTiming(0, { 
+      duration: 200, 
+      easing: Easing.in(Easing.ease) 
+    });
+    menuScaleAnim.value = withTiming(0.95, { 
+      duration: 200, 
+      easing: Easing.in(Easing.ease) 
+    }, () => {
+      runOnJS(setIsMenuVisible)(false);
     });
   };
 
@@ -957,42 +909,95 @@ function MainApp() {
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       
-      {/* Header'ı sadece authenticated kullanıcılar için göster */}
+      {/* Modern Header - sadece authenticated kullanıcılar için göster */}
       {(isAuthenticated || currentScreen === 'Settings' || currentScreen === 'PrivacyPolicy') && (
-        <Appbar.Header
-          style={{
-            backgroundColor: theme.colors.primary,
-            elevation: 4,
-          }}
-        >
-          <Appbar.Action
-            icon="menu"
-            color={theme.colors.onPrimary}
-            onPress={openMenu}
+        <View style={[styles.modernHeaderWrapper, { paddingTop: insets.top }]}>
+          {/* Gradient Background - extends to top including safe area */}
+          <LinearGradient
+            colors={isDarkMode 
+              ? ['#1E3A5F', '#2D4F7C', '#3A6599']
+              : ['#1E88E5', '#42A5F5', '#64B5F6']}
+            style={StyleSheet.absoluteFillObject}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
           />
-          <Appbar.Content
-            title={getCurrentTitle()}
-            color={theme.colors.onPrimary}
-            titleStyle={styles.headerTitle}
-          />
-          <Appbar.Action
-            icon={isDarkMode ? "white-balance-sunny" : "weather-night"}
-            color={theme.colors.onPrimary}
-            onPress={toggleTheme}
-          />
-        </Appbar.Header>
+          
+          {/* Glassmorphism Overlay */}
+          <View style={styles.headerGlassOverlay} />
+          
+          {/* Header Content */}
+          <View style={styles.modernHeaderContainer}>
+            <View style={styles.modernHeaderContent}>
+            {/* Hamburger Menu Button */}
+            <MotiView
+              from={{ scale: 1 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', damping: 15, stiffness: 300 }}
+            >
+              <TouchableOpacity
+                onPress={openMenu}
+                activeOpacity={0.8}
+                style={styles.modernHeaderButton}
+              >
+                <MotiView
+                  animate={{ 
+                    rotate: '0deg',
+                    scale: 1
+                  }}
+                  transition={{ type: 'spring', damping: 12, stiffness: 200 }}
+                >
+                  <MaterialCommunityIcons
+                    name="menu"
+                    size={26}
+                    color="#FFFFFF"
+                  />
+                </MotiView>
+              </TouchableOpacity>
+            </MotiView>
+            
+            {/* Title */}
+            <View style={styles.modernHeaderTitleContainer}>
+              <Text style={styles.modernHeaderTitle}>
+                {getCurrentTitle()}
+              </Text>
+            </View>
+            
+            {/* Dark/Light Mode Toggle Button */}
+            <MotiView
+              from={{ scale: 1, rotate: '0deg' }}
+              animate={{ 
+                scale: 1,
+                rotate: isDarkMode ? '180deg' : '0deg'
+              }}
+              transition={{ type: 'spring', damping: 12, stiffness: 200 }}
+            >
+              <TouchableOpacity
+                onPress={toggleTheme}
+                activeOpacity={0.8}
+                style={styles.modernHeaderButton}
+              >
+                <MotiView
+                  animate={{ 
+                    scale: 1,
+                    rotate: isDarkMode ? '180deg' : '0deg'
+                  }}
+                  transition={{ type: 'spring', damping: 12, stiffness: 200 }}
+                >
+                  <MaterialCommunityIcons
+                    name={isDarkMode ? "white-balance-sunny" : "weather-night"}
+                    size={24}
+                    color="#FFFFFF"
+                  />
+                </MotiView>
+              </TouchableOpacity>
+            </MotiView>
+            </View>
+          </View>
+        </View>
       )}
 
-      {/* Content with animation */}
-      <Animated.View
-        style={[
-          styles.surfaceWrapper,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          }
-        ]}
-      >
+      {/* Content with animation - Reanimated 3 */}
+      <Animated.View style={[styles.surfaceWrapper, screenWrapperStyle]}>
         <Surface style={styles.content}>
           {renderCurrentScreen()}
         </Surface>
@@ -1011,22 +1016,15 @@ function MainApp() {
           activeOpacity={1}
           onPress={closeMenu}
         >
-          <Animated.View
-            style={[
-              styles.menuWrapper,
-              {
-                opacity: menuFadeAnim,
-              }
-            ]}
-          >
+          <Animated.View style={[styles.menuWrapper, menuWrapperStyle]}>
             <Animated.View
               style={[
                 styles.menuContainer,
+                menuContainerStyle,
                 {
-                  transform: [{ translateX: menuSlideAnim }],
                   backgroundColor: theme.colors.surface,
                   borderRightColor: theme.colors.outlineVariant,
-                  width: isLandscape ? Math.min(400, screenWidth * 0.4) : 300
+                  width: isLandscape ? Math.min(400, screenWidth * 0.4) : Math.min(300, screenWidth * 0.85)
                 }
               ]}
             >
@@ -1034,25 +1032,39 @@ function MainApp() {
                 style={styles.menuSurface}
                 elevation={4}
               >
-            {/* Header with gradient background */}
-            <View style={[styles.menuHeader, { backgroundColor: theme.colors.primary }]}>
-              <View style={styles.headerContent}>
-                <Text 
-                  variant="headlineSmall" 
-                  style={[styles.menuTitle, { color: theme.colors.onPrimary }]}
-                >
-                  {agentName}
-                </Text>
+            {/* Header with gradient background - matching main header style */}
+            <View style={[styles.menuHeader, styles.modernHeaderWrapper, { paddingTop: insets.top }]}>
+              {/* Gradient Background */}
+              <LinearGradient
+                colors={isDarkMode 
+                  ? ['#1E3A5F', '#2D4F7C', '#3A6599']
+                  : ['#1E88E5', '#42A5F5', '#64B5F6']}
+                style={StyleSheet.absoluteFillObject}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              />
+              
+              {/* Glassmorphism Overlay */}
+              <View style={styles.headerGlassOverlay} />
+              
+              {/* Header Content */}
+              <View style={styles.modernHeaderContainer}>
+                <View style={styles.modernHeaderContent}>
+                  <View style={styles.modernHeaderTitleContainer}>
+                    <Text style={styles.modernHeaderTitle}>
+                      {agentName}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={closeMenu}
+                    style={styles.modernHeaderButton}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="close" size={24} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
               </View>
-              <TouchableOpacity
-                onPress={closeMenu}
-                style={styles.closeButton}
-              >
-                <Ionicons name="close" size={24} color={theme.colors.onPrimary} />
-              </TouchableOpacity>
             </View>
-            
-            <Divider />
             
             <ScrollView 
               style={styles.menuContent}
@@ -1075,54 +1087,64 @@ function MainApp() {
                 const iconColor = isActive ? '#FFFFFF' : (item.iconColor || theme.colors.onSurfaceVariant);
                 
                 return (
-                  <TouchableOpacity
+                  <MotiView
                     key={item.name}
-                    onPress={() => handleMenuSelect(item.name)}
-                    activeOpacity={0.7}
-                    style={[
-                      styles.menuItemContainer,
-                      isActive && {
-                        backgroundColor: item.iconColor || theme.colors.primary,
-                        borderRadius: 16,
-                        marginHorizontal: 12,
-                        marginVertical: 4,
-                      }
-                    ]}
+                    from={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ 
+                      type: 'timing', 
+                      duration: 200,
+                      delay: menuItems.indexOf(item) * 30 
+                    }}
                   >
-                    <View style={[
-                      styles.menuItemContent,
-                      isActive && styles.menuItemContentActive
-                    ]}>
+                    <TouchableOpacity
+                      onPress={() => handleMenuSelect(item.name)}
+                      activeOpacity={0.7}
+                      style={[
+                        styles.menuItemContainer,
+                        isActive && {
+                          backgroundColor: item.iconColor || theme.colors.primary,
+                          borderRadius: 16,
+                          marginHorizontal: 12,
+                          marginVertical: 4,
+                        }
+                      ]}
+                    >
                       <View style={[
-                        styles.iconContainer,
-                        isActive && { backgroundColor: 'rgba(255, 255, 255, 0.2)' },
-                        !isActive && { backgroundColor: `${item.iconColor}15` }
+                        styles.menuItemContent,
+                        isActive && styles.menuItemContentActive
                       ]}>
-                        {item.iconLibrary === 'material' ? (
-                          <MaterialCommunityIcons
-                            name={item.icon as any}
-                            size={24}
-                            color={iconColor}
-                          />
-                        ) : (
-                          <Ionicons
-                            name={item.icon as any}
-                            size={24}
-                            color={iconColor}
-                          />
-                        )}
+                        <View style={[
+                          styles.iconContainer,
+                          isActive && { backgroundColor: 'rgba(255, 255, 255, 0.2)' },
+                          !isActive && { backgroundColor: `${item.iconColor}15` }
+                        ]}>
+                          {item.iconLibrary === 'material' ? (
+                            <MaterialCommunityIcons
+                              name={item.icon as any}
+                              size={24}
+                              color={iconColor}
+                            />
+                          ) : (
+                            <Ionicons
+                              name={item.icon as any}
+                              size={24}
+                              color={iconColor}
+                            />
+                          )}
+                        </View>
+                        <Text
+                          style={[
+                            styles.menuItemText,
+                            isActive && styles.menuItemTextActive,
+                            !isActive && { color: theme.colors.onSurface }
+                          ]}
+                        >
+                          {item.title}
+                        </Text>
                       </View>
-                      <Text
-                        style={[
-                          styles.menuItemText,
-                          isActive && styles.menuItemTextActive,
-                          !isActive && { color: theme.colors.onSurface }
-                        ]}
-                      >
-                        {item.title}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
+                    </TouchableOpacity>
+                  </MotiView>
                 );
               })}
               
@@ -1484,6 +1506,67 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  // Modern Header Styles
+  modernHeaderWrapper: {
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    overflow: 'hidden',
+  },
+  modernHeaderContainer: {
+    height: 56,
+    backgroundColor: 'transparent',
+  },
+  headerGlassOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  modernHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 56,
+    paddingHorizontal: 8,
+  },
+  modernHeaderButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    marginHorizontal: 4,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  modernHeaderTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  modernHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   surfaceWrapper: {
     flex: 1,
   },
@@ -1508,26 +1591,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuHeader: {
-    padding: 16,
-    paddingTop: 56,
-    paddingBottom: 24,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuTitle: {
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  closeButton: {
-    padding: 8,
-    borderRadius: 20,
+    overflow: 'hidden',
   },
   menuContent: {
     flex: 1,

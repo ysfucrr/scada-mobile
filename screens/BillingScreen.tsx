@@ -1,11 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MotiView } from 'moti';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  Animated,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -15,6 +15,15 @@ import {
   Platform,
   ToastAndroid
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withRepeat,
+  withSequence,
+  Easing,
+} from 'react-native-reanimated';
 import { ActivityIndicator, useTheme as usePaperTheme } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import GradientCard from '../components/GradientCard';
@@ -44,6 +53,276 @@ interface BillingType {
   updatedAt?: string;
 }
 
+// Billing Item Component - Separate component to use hooks properly
+const BillingItem = React.memo(({ 
+  billing, 
+  index, 
+  isExpanded, 
+  isBeingDragged, 
+  isSelected, 
+  canDrop,
+  registerValues,
+  breathingAnimValue,
+  onLongPress,
+  onPress,
+  formatCurrency,
+  convertToUnit,
+  getDaysDifference,
+  billingCardWidth,
+  numColumns,
+  isDarkMode
+}: {
+  billing: BillingType;
+  index: number;
+  isExpanded: boolean;
+  isBeingDragged: boolean;
+  isSelected: boolean;
+  canDrop: boolean;
+  registerValues: Map<string, number>;
+  breathingAnimValue: ReturnType<typeof useSharedValue<number>>;
+  onLongPress: () => void;
+  onPress: () => void;
+  formatCurrency: (amount: number, currency: string) => string;
+  convertToUnit: (value: number | undefined) => string;
+  getDaysDifference: (startTime: string) => number;
+  billingCardWidth?: number;
+  numColumns: number;
+  isDarkMode: boolean;
+}) => {
+  // No animation - instant expand/collapse
+  // Calculate totals
+  let totalUsed = 0;
+  let totalCost = 0;
+  
+  billing.trendLogs.forEach(trendLog => {
+    const currentValue = registerValues.get(trendLog.registerId) || trendLog.currentValue || trendLog.firstValue;
+    const used = Math.max(0, currentValue - trendLog.firstValue);
+    totalUsed += used;
+    totalCost += used * billing.price;
+  });
+
+  // Get gradient colors based on index
+  const gradientColors = isDarkMode 
+    ? [
+        ['#1A237E', '#283593', '#3949AB'],
+        ['#004D40', '#00695C', '#00796B'],
+        ['#5D4037', '#6D4C41', '#795548'],
+        ['#BF360C', '#D84315', '#E64A19'],
+      ][index % 4] as [string, string, ...string[]]
+    : [
+        ['#1E88E5', '#42A5F5', '#64B5F6'],
+        ['#00ACC1', '#26C6DA', '#4DD0E1'],
+        ['#7B1FA2', '#9C27B0', '#BA68C8'],
+        ['#F57C00', '#FF9800', '#FFB74D'],
+      ][index % 4] as [string, string, ...string[]];
+  
+  // No expand animation - instant show/hide
+  
+  // Animated style for breathing animation - Reanimated 3
+  const breathingStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: isBeingDragged ? (breathingAnimValue.value as number) : 1 }],
+  }), [isBeingDragged, breathingAnimValue]);
+
+  return (
+    <MotiView
+      from={{ opacity: 0, scale: 0.95, translateY: 10 }}
+      animate={{ opacity: 1, scale: 1, translateY: 0 }}
+      transition={{ 
+        type: 'spring', 
+        damping: 18, 
+        stiffness: 90, 
+        mass: 0.8,
+        delay: index * 40 
+      }}
+      style={[
+        styles.billingCardWrapper,
+        billingCardWidth ? { width: billingCardWidth } : undefined,
+        numColumns > 1 ? { marginBottom: 0 } : undefined
+      ]}
+    >
+      <TouchableOpacity
+        onLongPress={onLongPress}
+        onPress={onPress}
+        activeOpacity={1}
+        delayLongPress={300}
+      >
+      <Animated.View style={[
+        isBeingDragged ? styles.beingDragged : undefined,
+        canDrop ? styles.dropTarget : undefined,
+        breathingStyle,
+      ]}>
+      <GradientCard
+        colors={gradientColors}
+        style={styles.billingCard}
+        mode="elevated"
+      >
+        <BlurView
+          intensity={isDarkMode ? 30 : 20}
+          tint={isDarkMode ? "dark" : "light"}
+          style={styles.blurContainer}
+        >
+          {/* Header */}
+          <View style={styles.billingHeader}>
+            <View style={styles.headerLeft}>
+              <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
+                <MaterialCommunityIcons
+                  name="file-document-outline"
+                  size={24}
+                  color="#FFFFFF"
+                />
+              </View>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.billingName}>{billing.name}</Text>
+                <View style={styles.priceBadge}>
+                  <MaterialCommunityIcons
+                    name="currency-usd"
+                    size={14}
+                    color="#FFFFFF"
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={styles.priceText}>
+                    {formatCurrency(billing.price, billing.currency)}/kWh
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={{ transform: [{ rotate: isExpanded ? '180deg' : '0deg' }] }}>
+              <MaterialCommunityIcons
+                name="chevron-down"
+                size={28}
+                color="#FFFFFF"
+              />
+            </View>
+          </View>
+
+          {/* Expanded Content */}
+          {isExpanded && (
+          <View
+            style={styles.expandedContent}
+          >
+            <View style={styles.contentInner}>
+              {/* Summary Cards */}
+              <View style={styles.summaryCards}>
+                <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}>
+                  <MaterialCommunityIcons
+                    name="calendar-clock"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.summaryCardLabel}>Days</Text>
+                  <Text style={styles.summaryCardValue}>
+                    {getDaysDifference(billing.startTime)}
+                  </Text>
+                </View>
+                <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}>
+                  <MaterialCommunityIcons
+                    name="flash"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.summaryCardLabel}>Used</Text>
+                  <Text style={styles.summaryCardValue}>
+                    {convertToUnit(totalUsed)}
+                  </Text>
+                </View>
+                <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
+                  <MaterialCommunityIcons
+                    name="cash-multiple"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.summaryCardLabel}>Total Cost</Text>
+                  <Text style={[styles.summaryCardValue, styles.totalCostValue]}>
+                    {formatCurrency(totalCost, billing.currency)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Trend Logs */}
+              <View style={styles.trendLogsContainer}>
+                <Text style={styles.trendLogsTitle}>
+                  <MaterialCommunityIcons name="chart-line" size={18} color="#FFFFFF" /> Energy Meters
+                </Text>
+                {billing.trendLogs.map((trendLog, idx) => {
+                  const currentValue = registerValues.get(trendLog.registerId) || trendLog.currentValue || trendLog.firstValue;
+                  const used = Math.max(0, currentValue - trendLog.firstValue);
+                  const cost = used * billing.price;
+
+                  return (
+                    <View
+                      key={`${billing._id}-${trendLog.id}-${idx}`}
+                      style={[styles.trendLogCard, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}
+                    >
+                      <View style={styles.trendLogHeader}>
+                        <View style={styles.trendLogIconContainer}>
+                          <MaterialCommunityIcons
+                            name="gauge"
+                            size={18}
+                            color="#FFFFFF"
+                          />
+                        </View>
+                        <Text style={styles.trendLogName}>{trendLog.analyzerName}</Text>
+                      </View>
+                      
+                      <View style={styles.trendLogMetrics}>
+                        <View style={styles.metricRow}>
+                          <View style={styles.metricItem}>
+                            <Text style={styles.metricLabel}>First</Text>
+                            <Text style={styles.metricValue}>
+                              {convertToUnit(trendLog.firstValue)}
+                            </Text>
+                          </View>
+                          <View style={styles.metricItem}>
+                            <Text style={styles.metricLabel}>Current</Text>
+                            <Text style={styles.metricValue}>
+                              {convertToUnit(currentValue)}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.metricRow}>
+                          <View style={styles.metricItem}>
+                            <Text style={styles.metricLabel}>Used</Text>
+                            <Text style={[styles.metricValue, styles.usedValue]}>
+                              {convertToUnit(used)}
+                            </Text>
+                          </View>
+                          <View style={[styles.metricItem, styles.costItem]}>
+                            <Text style={styles.metricLabel}>Cost</Text>
+                            <Text style={[styles.metricValue, styles.costValue]}>
+                              {formatCurrency(cost, billing.currency)}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Footer Info */}
+              <View style={styles.footerInfo}>
+                <View style={styles.footerItem}>
+                  <MaterialCommunityIcons
+                    name="calendar-start"
+                    size={16}
+                    color="rgba(255, 255, 255, 0.8)"
+                  />
+                  <Text style={styles.footerText}>
+                    Started: {new Date(billing.startTime).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+          )}
+        </BlurView>
+      </GradientCard>
+      </Animated.View>
+      </TouchableOpacity>
+    </MotiView>
+  );
+});
+
 export default function BillingScreen() {
   const paperTheme = usePaperTheme();
   const { isDarkMode } = useAppTheme();
@@ -54,32 +333,26 @@ export default function BillingScreen() {
   const [billings, setBillings] = useState<BillingType[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [expandedBilling, setExpandedBilling] = useState<string | null>(null);
+  const [expandedBilling, setExpandedBilling] = useState<Set<string>>(new Set());
   const [registerValues, setRegisterValues] = useState<Map<string, number>>(new Map());
   const [draggedBillingIndex, setDraggedBillingIndex] = useState<number | undefined>(undefined);
   const [billingOrder, setBillingOrder] = useState<string[]>([]);
   
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const expandAnims = useRef(new Map<string, Animated.Value>()).current;
-  const breathingAnim = useRef(new Animated.Value(1)).current;
-  const breathingAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  // Animation values - Reanimated 3
+  const fadeAnim = useSharedValue(0);
+  const slideAnim = useSharedValue(50);
+  const breathingAnim = useSharedValue(1);
+
+  // Animated styles for screen transitions - Reanimated 3 (must be called before any early returns)
+  const screenStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateY: slideAnim.value }],
+  }));
 
   useEffect(() => {
-    // Entry animation
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 400,
-        useNativeDriver: true,
-      }),
-    ]).start();
+    // Fast entry animation - Reanimated 3
+    fadeAnim.value = withTiming(1, { duration: 150, easing: Easing.out(Easing.ease) });
+    slideAnim.value = withTiming(0, { duration: 150, easing: Easing.out(Easing.ease) });
 
     if (isConnected) {
       loadBillings();
@@ -97,47 +370,55 @@ export default function BillingScreen() {
     const activeSubscriptions = new Map<string, any>();
     const activeCallbacks = new Map<string, (value: any) => void>();
     
-    if (wsConnected && expandedBilling) {
-      const billing = billings.find(b => b._id === expandedBilling);
-      
-      if (billing) {
-        // Get all registers to find register details
-        ApiService.getRegisters().then(registers => {
-          billing.trendLogs.forEach(trendLog => {
-            // Find register by registerId
-            const register = registers.find(r => r._id === trendLog.registerId);
-            
-            if (register) {
-              // Create register subscription
-              const registerSubscription = {
-                analyzerId: register.analyzerId,
-                address: register.address,
-                dataType: register.dataType,
-                scale: register.scale,
-                byteOrder: register.byteOrder,
-                bit: register.bit,
-                registerId: register._id
-              };
+    if (wsConnected && expandedBilling.size > 0) {
+      // Get all registers to find register details
+      ApiService.getRegisters().then(registers => {
+        // Process all expanded billings
+        expandedBilling.forEach(billingId => {
+          const billing = billings.find(b => b._id === billingId);
+          
+          if (billing) {
+            billing.trendLogs.forEach(trendLog => {
+              // Skip if already subscribed
+              if (activeSubscriptions.has(trendLog.registerId)) {
+                return;
+              }
               
-              // Create callback for this register
-              const callback = (value: any) => {
-                setRegisterValues(prev => {
-                  const newMap = new Map(prev);
-                  newMap.set(trendLog.registerId, value);
-                  return newMap;
-                });
-              };
+              // Find register by registerId
+              const register = registers.find(r => r._id === trendLog.registerId);
               
-              // Watch the register
-              watchRegister(registerSubscription, callback);
-              
-              // Store subscription info and callback for cleanup
-              activeSubscriptions.set(trendLog.registerId, registerSubscription);
-              activeCallbacks.set(trendLog.registerId, callback);
-            }
-          });
+              if (register) {
+                // Create register subscription
+                const registerSubscription = {
+                  analyzerId: register.analyzerId,
+                  address: register.address,
+                  dataType: register.dataType,
+                  scale: register.scale,
+                  byteOrder: register.byteOrder,
+                  bit: register.bit,
+                  registerId: register._id
+                };
+                
+                // Create callback for this register
+                const callback = (value: any) => {
+                  setRegisterValues(prev => {
+                    const newMap = new Map(prev);
+                    newMap.set(trendLog.registerId, value);
+                    return newMap;
+                  });
+                };
+                
+                // Watch the register
+                watchRegister(registerSubscription, callback);
+                
+                // Store subscription info and callback for cleanup
+                activeSubscriptions.set(trendLog.registerId, registerSubscription);
+                activeCallbacks.set(trendLog.registerId, callback);
+              }
+            });
+          }
         });
-      }
+      });
     }
     
     return () => {
@@ -151,46 +432,19 @@ export default function BillingScreen() {
     };
   }, [wsConnected, expandedBilling, billings, watchRegister, unwatchRegister]);
 
-  // Nefes alma animasyonu - billing seçildiğinde başlat
+  // Nefes alma animasyonu - billing seçildiğinde başlat - Reanimated 3
   useEffect(() => {
     if (draggedBillingIndex !== undefined) {
-      // Önceki animasyonu durdur
-      if (breathingAnimationRef.current) {
-        breathingAnimationRef.current.stop();
-      }
-      
-      // Animasyonu başlat
-      const breathingAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(breathingAnim, {
-            toValue: 1.05,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(breathingAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
+      breathingAnim.value = withRepeat(
+        withSequence(
+          withTiming(1.05, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        false
       );
-      breathingAnimationRef.current = breathingAnimation;
-      breathingAnimation.start();
-
-      return () => {
-        if (breathingAnimationRef.current) {
-          breathingAnimationRef.current.stop();
-          breathingAnimationRef.current = null;
-        }
-        breathingAnim.setValue(1);
-      };
     } else {
-      // Animasyonu durdur ve değeri sıfırla
-      if (breathingAnimationRef.current) {
-        breathingAnimationRef.current.stop();
-        breathingAnimationRef.current = null;
-      }
-      breathingAnim.setValue(1);
+      breathingAnim.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
     }
   }, [draggedBillingIndex]);
 
@@ -199,12 +453,9 @@ export default function BillingScreen() {
       setIsLoading(true);
       const data = await ApiService.getBillings();
       
-      // Initialize expand animations for each billing
-      data.forEach(billing => {
-        if (!expandAnims.has(billing._id)) {
-          expandAnims.set(billing._id, new Animated.Value(0));
-        }
-      });
+      // Initialize expand animations for each billing - Reanimated 3
+      // Note: useSharedValue must be called at component level, not in loops
+      // We'll initialize them lazily in renderBillingItem
       
       // Kaydedilmiş billing sıralamasını kontrol et
       try {
@@ -268,19 +519,15 @@ export default function BillingScreen() {
   };
 
   const toggleBilling = (billingId: string) => {
-    const isExpanding = expandedBilling !== billingId;
-    setExpandedBilling(isExpanding ? billingId : null);
-    
-    // Animate expansion/collapse
-    const animValue = expandAnims.get(billingId);
-    if (animValue) {
-      Animated.spring(animValue, {
-        toValue: isExpanding ? 1 : 0,
-        useNativeDriver: false,
-        tension: 65,
-        friction: 11,
-      }).start();
-    }
+    setExpandedBilling(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(billingId)) {
+        newSet.delete(billingId);
+      } else {
+        newSet.add(billingId);
+      }
+      return newSet;
+    });
   };
 
   const convertToUnit = (value: number | undefined): string => {
@@ -325,12 +572,7 @@ export default function BillingScreen() {
   const handleBillingPress = (index: number) => {
     // Eğer bu billing zaten seçiliyse, seçimi kaldır
     if (draggedBillingIndex === index) {
-      // Animasyonu durdur ve scale'i sıfırla
-      if (breathingAnimationRef.current) {
-        breathingAnimationRef.current.stop();
-        breathingAnimationRef.current = null;
-      }
-      breathingAnim.setValue(1);
+      breathingAnim.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
       setDraggedBillingIndex(undefined);
     }
   };
@@ -338,12 +580,7 @@ export default function BillingScreen() {
   // Billing bırakıldığında çağrılır
   const handleBillingDrop = async (targetIndex: number) => {
     if (draggedBillingIndex === undefined || draggedBillingIndex === targetIndex) {
-      // Animasyonu durdur ve scale'i sıfırla
-      if (breathingAnimationRef.current) {
-        breathingAnimationRef.current.stop();
-        breathingAnimationRef.current = null;
-      }
-      breathingAnim.setValue(1);
+      breathingAnim.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
       setDraggedBillingIndex(undefined);
       return;
     }
@@ -367,270 +604,50 @@ export default function BillingScreen() {
       console.error('Billing sıralaması kaydedilirken hata:', error);
     }
     
-    // Animasyonu durdur ve scale'i sıfırla
-    if (breathingAnimationRef.current) {
-      breathingAnimationRef.current.stop();
-      breathingAnimationRef.current = null;
-    }
-    breathingAnim.setValue(1);
+    breathingAnim.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
     
     // Sürüklemeyi sonlandırma
     setDraggedBillingIndex(undefined);
   };
 
   const renderBillingItem = ({ item: billing, index }: { item: BillingType; index: number }) => {
-    const isExpanded = expandedBilling === billing._id;
+    const isExpanded = expandedBilling.has(billing._id);
     const isBeingDragged = draggedBillingIndex === index;
     const isSelected = draggedBillingIndex === index;
     const canDrop = draggedBillingIndex !== undefined && draggedBillingIndex !== index;
     
-    // Calculate totals
-    let totalUsed = 0;
-    let totalCost = 0;
-    
-    billing.trendLogs.forEach(trendLog => {
-      const currentValue = registerValues.get(trendLog.registerId) || trendLog.currentValue || trendLog.firstValue;
-      const used = Math.max(0, currentValue - trendLog.firstValue);
-      totalUsed += used;
-      totalCost += used * billing.price;
-    });
-
-    // Get gradient colors based on index
-    const gradientColors = isDarkMode 
-      ? [
-          ['#1A237E', '#283593', '#3949AB'],
-          ['#004D40', '#00695C', '#00796B'],
-          ['#5D4037', '#6D4C41', '#795548'],
-          ['#BF360C', '#D84315', '#E64A19'],
-        ][index % 4] as [string, string, ...string[]]
-      : [
-          ['#1E88E5', '#42A5F5', '#64B5F6'],
-          ['#00ACC1', '#26C6DA', '#4DD0E1'],
-          ['#7B1FA2', '#9C27B0', '#BA68C8'],
-          ['#F57C00', '#FF9800', '#FFB74D'],
-        ][index % 4] as [string, string, ...string[]];
-    
-    const expandAnim = expandAnims.get(billing._id) || new Animated.Value(0);
-    const rotateAnim = expandAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: ['0deg', '180deg'],
-    });
-
-    const maxHeight = expandAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0, billing.trendLogs.length * 200 + 300],
-    });
-
-    // Seçili billing için animasyonlu scale
-    const animatedStyle = isBeingDragged
-      ? { transform: [{ scale: breathingAnim }] }
-      : {};
-
     // Calculate card width based on numColumns
     const billingCardWidth = numColumns > 1
       ? (screenWidth - 24 - (12 * (numColumns - 1))) / numColumns
       : undefined;
 
     return (
-      <TouchableOpacity
+      <BillingItem
+        billing={billing}
+        index={index}
+        isExpanded={isExpanded}
+        isBeingDragged={isBeingDragged}
+        isSelected={isSelected}
+        canDrop={canDrop}
+        registerValues={registerValues}
+        breathingAnimValue={breathingAnim}
         onLongPress={() => handleBillingLongPress(index)}
         onPress={() => {
-          // Eğer bu billing seçiliyse, seçimi kaldır
           if (isSelected) {
             handleBillingPress(index);
-          } 
-          // Eğer başka bir billing seçiliyse ve bu billing'e drop yapılabilirse, drop yap
-          else if (canDrop) {
+          } else if (canDrop) {
             handleBillingDrop(index);
-          }
-          // Normal tıklama - billing'i aç/kapat
-          else {
+          } else {
             toggleBilling(billing._id);
           }
         }}
-        activeOpacity={0.9}
-        delayLongPress={300}
-      >
-      <Animated.View style={[
-        styles.billingCardWrapper,
-        isBeingDragged ? styles.beingDragged : undefined,
-        canDrop ? styles.dropTarget : undefined,
-        animatedStyle,
-        billingCardWidth ? { width: billingCardWidth } : undefined,
-        numColumns > 1 ? { marginBottom: 0 } : undefined
-      ]}>
-        <GradientCard
-          colors={gradientColors}
-          style={styles.billingCard}
-          mode="elevated"
-        >
-          <BlurView
-            intensity={isDarkMode ? 30 : 20}
-            tint={isDarkMode ? "dark" : "light"}
-            style={styles.blurContainer}
-          >
-            {/* Header */}
-            <View style={styles.billingHeader}>
-              <View style={styles.headerLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
-                  <MaterialCommunityIcons
-                    name="file-document-outline"
-                    size={24}
-                    color="#FFFFFF"
-                  />
-                </View>
-                <View style={styles.headerTextContainer}>
-                  <Text style={styles.billingName}>{billing.name}</Text>
-                  <View style={styles.priceBadge}>
-                    <MaterialCommunityIcons
-                      name="currency-usd"
-                      size={14}
-                      color="#FFFFFF"
-                      style={{ marginRight: 4 }}
-                    />
-                    <Text style={styles.priceText}>
-                      {formatCurrency(billing.price, billing.currency)}/kWh
-                    </Text>
-                  </View>
-                </View>
-              </View>
-              <Animated.View style={{ transform: [{ rotate: rotateAnim }] }}>
-                <MaterialCommunityIcons
-                  name="chevron-down"
-                  size={28}
-                  color="#FFFFFF"
-                />
-              </Animated.View>
-            </View>
-
-            {/* Expanded Content */}
-            <Animated.View
-              style={[
-                styles.expandedContent,
-                {
-                  maxHeight,
-                  opacity: expandAnim,
-                }
-              ]}
-            >
-              <View style={styles.contentInner}>
-                {/* Summary Cards */}
-                <View style={styles.summaryCards}>
-                  <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}>
-                    <MaterialCommunityIcons
-                      name="calendar-clock"
-                      size={18}
-                      color="#FFFFFF"
-                    />
-                    <Text style={styles.summaryCardLabel}>Days</Text>
-                    <Text style={styles.summaryCardValue}>
-                      {getDaysDifference(billing.startTime)}
-                    </Text>
-                  </View>
-                  <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.15)' }]}>
-                    <MaterialCommunityIcons
-                      name="flash"
-                      size={18}
-                      color="#FFFFFF"
-                    />
-                    <Text style={styles.summaryCardLabel}>Used</Text>
-                    <Text style={styles.summaryCardValue}>
-                      {convertToUnit(totalUsed)}
-                    </Text>
-                  </View>
-                  <View style={[styles.summaryCard, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
-                    <MaterialCommunityIcons
-                      name="cash-multiple"
-                      size={18}
-                      color="#FFFFFF"
-                    />
-                    <Text style={styles.summaryCardLabel}>Total Cost</Text>
-                    <Text style={[styles.summaryCardValue, styles.totalCostValue]}>
-                      {formatCurrency(totalCost, billing.currency)}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Trend Logs */}
-                <View style={styles.trendLogsContainer}>
-                  <Text style={styles.trendLogsTitle}>
-                    <MaterialCommunityIcons name="chart-line" size={18} color="#FFFFFF" /> Energy Meters
-                  </Text>
-                  {billing.trendLogs.map((trendLog, idx) => {
-                    const currentValue = registerValues.get(trendLog.registerId) || trendLog.currentValue || trendLog.firstValue;
-                    const used = Math.max(0, currentValue - trendLog.firstValue);
-                    const cost = used * billing.price;
-
-                    return (
-                      <View
-                        key={`${billing._id}-${trendLog.id}-${idx}`}
-                        style={[styles.trendLogCard, { backgroundColor: 'rgba(255, 255, 255, 0.1)' }]}
-                      >
-                        <View style={styles.trendLogHeader}>
-                          <View style={styles.trendLogIconContainer}>
-                            <MaterialCommunityIcons
-                              name="gauge"
-                              size={18}
-                              color="#FFFFFF"
-                            />
-                          </View>
-                          <Text style={styles.trendLogName}>{trendLog.analyzerName}</Text>
-                        </View>
-                        
-                        <View style={styles.trendLogMetrics}>
-                          <View style={styles.metricRow}>
-                            <View style={styles.metricItem}>
-                              <Text style={styles.metricLabel}>First</Text>
-                              <Text style={styles.metricValue}>
-                                {convertToUnit(trendLog.firstValue)}
-                              </Text>
-                            </View>
-                            <View style={styles.metricItem}>
-                              <Text style={styles.metricLabel}>Current</Text>
-                              <Text style={styles.metricValue}>
-                                {convertToUnit(currentValue)}
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.metricRow}>
-                            <View style={styles.metricItem}>
-                              <Text style={styles.metricLabel}>Used</Text>
-                              <Text style={[styles.metricValue, styles.usedValue]}>
-                                {convertToUnit(used)}
-                              </Text>
-                            </View>
-                            <View style={[styles.metricItem, styles.costItem]}>
-                              <Text style={styles.metricLabel}>Cost</Text>
-                              <Text style={[styles.metricValue, styles.costValue]}>
-                                {formatCurrency(cost, billing.currency)}
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-
-                {/* Footer Info */}
-                <View style={styles.footerInfo}>
-                  <View style={styles.footerItem}>
-                    <MaterialCommunityIcons
-                      name="calendar-start"
-                      size={16}
-                      color="rgba(255, 255, 255, 0.8)"
-                    />
-                    <Text style={styles.footerText}>
-                      Started: {new Date(billing.startTime).toLocaleDateString()}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            </Animated.View>
-          </BlurView>
-        </GradientCard>
-      </Animated.View>
-      </TouchableOpacity>
+        formatCurrency={formatCurrency}
+        convertToUnit={convertToUnit}
+        getDaysDifference={getDaysDifference}
+        billingCardWidth={billingCardWidth}
+        numColumns={numColumns}
+        isDarkMode={isDarkMode}
+      />
     );
   };
 
@@ -673,15 +690,17 @@ export default function BillingScreen() {
     <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          }
-        ]}
-      >
+      {/* Modern Gradient Background */}
+      <LinearGradient
+        colors={isDarkMode 
+          ? ['#0D1B2A', '#1B263B', '#415A77', '#778DA9']
+          : ['#E3F2FD', '#BBDEFB', '#90CAF9', '#64B5F6']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      
+      <Animated.View style={[{ flex: 1 }, screenStyle]}>
         {billings.length === 0 ? (
           <View style={styles.centerContainer}>
             <LinearGradient

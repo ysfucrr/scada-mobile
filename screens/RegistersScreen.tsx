@@ -1,10 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MotiView } from 'moti';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Alert,
-  Animated,
   BackHandler,
   FlatList,
   RefreshControl,
@@ -17,6 +18,16 @@ import {
   Platform,
   ScrollView
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  withRepeat,
+  withSequence,
+  Easing,
+  runOnJS,
+} from 'react-native-reanimated';
 import SwipeGestureRecognizer from 'react-native-swipe-gestures';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ActivityIndicator, Card, useTheme as usePaperTheme } from 'react-native-paper';
@@ -67,12 +78,25 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
   const [analyzerOrder, setAnalyzerOrder] = useState<string[]>([]);
   const [draggedRegisterIndex, setDraggedRegisterIndex] = useState<number | undefined>(undefined);
   const [registerOrder, setRegisterOrder] = useState<string[]>([]);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const isTransitioningRef = useRef(false);
   
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const breathingAnimAnalyzer = useRef(new Animated.Value(1)).current;
-  const breathingAnimRegister = useRef(new Animated.Value(1)).current;
+  // Animation values - Reanimated 3
+  const fadeAnim = useSharedValue(1);
+  const slideAnim = useSharedValue(0);
+  const breathingAnimAnalyzer = useSharedValue(1);
+  const breathingAnimRegister = useSharedValue(1);
+
+  // Animated styles for screen transitions - Reanimated 3 (always call hooks in same order)
+  const screenStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateX: slideAnim.value }],
+  }));
+
+  const registerScreenStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ translateX: slideAnim.value }],
+  }));
 
   useEffect(() => {
     if (isConnected) {
@@ -116,63 +140,35 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
     }
   }, [analyzerOrder.length, viewMode, isLoading]);
 
-  // Nefes alma animasyonu - analizör seçildiğinde başlat
+  // Nefes alma animasyonu - analizör seçildiğinde başlat - Reanimated 3
   useEffect(() => {
     if (draggedAnalyzerIndex !== undefined && viewMode === 'analyzers') {
-      // Animasyonu başlat
-      const breathingAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(breathingAnimAnalyzer, {
-            toValue: 1.05,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(breathingAnimAnalyzer, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
+      breathingAnimAnalyzer.value = withRepeat(
+        withSequence(
+          withTiming(1.05, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        false
       );
-      breathingAnimation.start();
-
-      return () => {
-        breathingAnimation.stop();
-        breathingAnimAnalyzer.setValue(1);
-      };
     } else {
-      // Animasyonu durdur ve değeri sıfırla
-      breathingAnimAnalyzer.setValue(1);
+      breathingAnimAnalyzer.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
     }
   }, [draggedAnalyzerIndex, viewMode]);
 
-  // Nefes alma animasyonu - register seçildiğinde başlat
+  // Nefes alma animasyonu - register seçildiğinde başlat - Reanimated 3
   useEffect(() => {
     if (draggedRegisterIndex !== undefined && viewMode === 'registers') {
-      // Animasyonu başlat
-      const breathingAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(breathingAnimRegister, {
-            toValue: 1.05,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(breathingAnimRegister, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
+      breathingAnimRegister.value = withRepeat(
+        withSequence(
+          withTiming(1.05, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+          withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) })
+        ),
+        -1,
+        false
       );
-      breathingAnimation.start();
-
-      return () => {
-        breathingAnimation.stop();
-        breathingAnimRegister.setValue(1);
-      };
     } else {
-      // Animasyonu durdur ve değeri sıfırla
-      breathingAnimRegister.setValue(1);
+      breathingAnimRegister.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.ease) });
     }
   }, [draggedRegisterIndex, viewMode]);
 
@@ -520,6 +516,11 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
   }, [draggedRegisterIndex, registerOrder]);
 
   const handleAnalyzerSelect = (analyzerId: string) => {
+    // Prevent multiple calls during transition
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
+    setIsTransitioning(true);
+    
     // Analizör adını bul
     const analyzerRegisters = groupedRegisters.get(analyzerId) || [];
     const analyzerName = analyzerRegisters.length > 0 
@@ -531,89 +532,92 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
       onSelectedAnalyzerChange(analyzerName);
     }
     
-    // Animate transition
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: -50,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // Analizör seçildiğinde eski gerçek zamanlı değerleri temizle
-      setRealTimeValues(new Map());
-      setSelectedAnalyzerId(analyzerId);
-      setViewMode('registers');
-      
-      // Animate in
-      Animated.timing(slideAnim, {
-        toValue: 50,
-        duration: 0,
-        useNativeDriver: true,
-      }).start(() => {
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      });
+    // Helper function to reset transition flag
+    const resetTransitionFlag = () => {
+      isTransitioningRef.current = false;
+      setIsTransitioning(false);
+    };
+    
+    // Update state immediately for instant response
+    setRealTimeValues(new Map());
+    setSelectedAnalyzerId(analyzerId);
+    setViewMode('registers');
+    
+    // Very fast fade out animation
+    fadeAnim.value = withTiming(0, { 
+      duration: 100, 
+      easing: Easing.out(Easing.ease) 
+    });
+    slideAnim.value = withTiming(-20, { 
+      duration: 100, 
+      easing: Easing.out(Easing.ease) 
+    }, (finished) => {
+      if (finished) {
+        // Very fast fade in animation
+        slideAnim.value = 20;
+        fadeAnim.value = withTiming(1, { 
+          duration: 150, 
+          easing: Easing.out(Easing.ease) 
+        });
+        slideAnim.value = withTiming(0, { 
+          duration: 150, 
+          easing: Easing.out(Easing.ease) 
+        }, (finished) => {
+          if (finished) {
+            runOnJS(resetTransitionFlag)();
+          }
+        });
+      }
     });
   };
 
   const handleBackToAnalyzers = () => {
+    // Prevent multiple calls during transition
+    if (isTransitioningRef.current) return;
+    isTransitioningRef.current = true;
+    setIsTransitioning(true);
+    
     // App.tsx'e seçili analizör olmadığını bildir
     if (onSelectedAnalyzerChange) {
       onSelectedAnalyzerChange(null);
     }
     
-    // Animate transition
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 50,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // Analizörler ekranına döndüğünde gerçek zamanlı değerleri temizle
-      setRealTimeValues(new Map());
-      setSelectedAnalyzerId(null);
-      setViewMode('analyzers');
-      
-      // Animate in
-      Animated.timing(slideAnim, {
-        toValue: -50,
-        duration: 0,
-        useNativeDriver: true,
-      }).start(() => {
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      });
+    // Helper function to reset transition flag
+    const resetTransitionFlag = () => {
+      isTransitioningRef.current = false;
+      setIsTransitioning(false);
+    };
+    
+    // Update state immediately for instant response
+    setRealTimeValues(new Map());
+    setSelectedAnalyzerId(null);
+    setViewMode('analyzers');
+    
+    // Very fast fade out animation
+    fadeAnim.value = withTiming(0, { 
+      duration: 100, 
+      easing: Easing.out(Easing.ease) 
+    });
+    slideAnim.value = withTiming(20, { 
+      duration: 100, 
+      easing: Easing.out(Easing.ease) 
+    }, (finished) => {
+      if (finished) {
+        // Very fast fade in animation
+        slideAnim.value = -20;
+        fadeAnim.value = withTiming(1, { 
+          duration: 150, 
+          easing: Easing.out(Easing.ease) 
+        });
+        slideAnim.value = withTiming(0, { 
+          duration: 150, 
+          easing: Easing.out(Easing.ease) 
+        }, (finished) => {
+          if (finished) {
+            runOnJS(resetTransitionFlag)();
+          }
+        });
+      }
     });
   };
 
@@ -636,11 +640,6 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
     const isBeingDragged = draggedAnalyzerIndex === index;
     const gradientColors = isDarkMode ? ['#263238', '#37474F'] as const : ['#1E88E5', '#42A5F5'] as const;
     
-    // Seçili analizör için animasyonlu scale
-    const animatedStyle = draggedAnalyzerIndex === index
-      ? { transform: [{ scale: breathingAnimAnalyzer }] }
-      : {};
-    
     // Calculate card width based on numColumns with proper spacing
     // Phone landscape: better padding and gap
     // Tablet: optimized for larger screens
@@ -652,107 +651,121 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
       : undefined;
     
     return (
-      <Animated.View style={[
-        animatedStyle,
-        analyzerCardWidth ? { width: analyzerCardWidth } : undefined
-      ]}>
-        <TouchableOpacity
-          onLongPress={() => handleAnalyzerLongPress(index)}
-          onPress={() => {
-            // Eğer bu analizör seçiliyse, seçimi kaldır
-            if (draggedAnalyzerIndex === index) {
-              handleAnalyzerPress(index);
-            } 
-            // Eğer başka bir analizör seçiliyse ve bu analizöre drop yapılabilirse, drop yap
-            else if (draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index) {
-              handleAnalyzerDrop(index);
-            }
-            // Normal durumda analizörü seç
-            else {
-              handleAnalyzerSelect(analyzerId);
-            }
-          }}
-          activeOpacity={0.9}
-          delayLongPress={500}
-        >
-        <View style={[
-          styles.cardWrapper,
-          numColumns > 1 && { marginBottom: 0 }
-        ]}>
-          <GradientCard
-            colors={gradientColors}
-            style={{
-              ...styles.analyzerCard,
-              ...(isBeingDragged ? styles.beingDragged : {}),
-              ...(draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index ? styles.dropTarget : {}),
-              ...(numColumns > 1 && { marginBottom: 0 })
+      <MotiView
+        from={{ opacity: 0, scale: 0.95, translateY: 10 }}
+        animate={{ 
+          opacity: isTransitioning ? 0 : 1, 
+          scale: isTransitioning ? 0.95 : 1, 
+          translateY: isTransitioning ? 10 : 0 
+        }}
+        transition={{ 
+          type: 'spring', 
+          damping: 18, 
+          stiffness: 90, 
+          mass: 0.8,
+          delay: isTransitioning ? 0 : index * 40 
+        }}
+        style={analyzerCardWidth ? { width: analyzerCardWidth } : undefined}
+      >
+        <View>
+          <TouchableOpacity
+            onLongPress={() => handleAnalyzerLongPress(index)}
+            onPress={() => {
+              // Eğer bu analizör seçiliyse, seçimi kaldır
+              if (draggedAnalyzerIndex === index) {
+                handleAnalyzerPress(index);
+              } 
+              // Eğer başka bir analizör seçiliyse ve bu analizöre drop yapılabilirse, drop yap
+              else if (draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index) {
+                handleAnalyzerDrop(index);
+              }
+              // Normal durumda analizörü seç
+              else {
+                handleAnalyzerSelect(analyzerId);
+              }
             }}
-            mode="elevated"
+            activeOpacity={0.9}
+            delayLongPress={500}
           >
-          <BlurView
-            intensity={isDarkMode ? 20 : 15}
-            tint={isDarkMode ? "dark" : "light"}
-            style={styles.blurContainer}
-          >
-            <View style={styles.analyzerContent}>
-              {/* Header */}
-              <View style={styles.analyzerHeader}>
-                <View style={styles.iconWrapper}>
-                  <MaterialCommunityIcons
-                    name="chip"
-                    size={24}
-                    color="white"
-                  />
-                </View>
-                <View style={styles.analyzerInfo}>
-                  <Text style={styles.analyzerName}>
-                    {firstRegister.analyzerName || `analizör ${analyzerId}`}
-                  </Text>
-                  <Text style={styles.buildingName}>
-                    {firstRegister.buildingName || 'Unknown Building'}
-                  </Text>
-                </View>
-                {stats.live > 0 && (
-                  <View style={styles.liveBadge}>
-                    <View style={styles.pulseIndicator} />
-                    <Text style={styles.liveText}>LIVE</Text>
+            <View style={[
+              styles.cardWrapper,
+              numColumns > 1 && { marginBottom: 0 }
+            ]}>
+              <GradientCard
+                colors={gradientColors}
+                style={{
+                  ...styles.analyzerCard,
+                  ...(isBeingDragged ? styles.beingDragged : {}),
+                  ...(draggedAnalyzerIndex !== undefined && draggedAnalyzerIndex !== index ? styles.dropTarget : {}),
+                  ...(numColumns > 1 && { marginBottom: 0 })
+                }}
+                mode="elevated"
+              >
+                <BlurView
+                  intensity={isDarkMode ? 20 : 15}
+                  tint={isDarkMode ? "dark" : "light"}
+                  style={styles.blurContainer}
+                >
+                  <View style={styles.analyzerContent}>
+                    {/* Header */}
+                    <View style={styles.analyzerHeader}>
+                      <View style={styles.iconWrapper}>
+                        <MaterialCommunityIcons
+                          name="chip"
+                          size={24}
+                          color="white"
+                        />
+                      </View>
+                      <View style={styles.analyzerInfo}>
+                        <Text style={styles.analyzerName}>
+                          {firstRegister.analyzerName || `analizör ${analyzerId}`}
+                        </Text>
+                        <Text style={styles.buildingName}>
+                          {firstRegister.buildingName || 'Unknown Building'}
+                        </Text>
+                      </View>
+                      {stats.live > 0 && (
+                        <View style={styles.liveBadge}>
+                          <View style={styles.pulseIndicator} />
+                          <Text style={styles.liveText}>LIVE</Text>
+                        </View>
+                      )}
+                    </View>
+                    
+                    {/* Stats */}
+                    <View style={[
+                      styles.statsContainer,
+                      numColumns > 1 && styles.statsContainerLandscape
+                    ]}>
+                      <View style={[
+                        styles.statCard,
+                        numColumns > 1 && styles.statCardLandscape
+                      ]}>
+                        <Text style={styles.statValue}>
+                          {stats.total}
+                        </Text>
+                        <Text style={styles.statLabel}>
+                          Total Registers
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    {/* Footer */}
+                    <View style={styles.analyzerFooter}>
+                      <Text style={styles.tapHint}>Tap to view registers</Text>
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={18}
+                        color="rgba(255,255,255,0.8)"
+                      />
+                    </View>
                   </View>
-                )}
-              </View>
-              
-              {/* Stats */}
-              <View style={[
-                styles.statsContainer,
-                numColumns > 1 && styles.statsContainerLandscape
-              ]}>
-                <View style={[
-                  styles.statCard,
-                  numColumns > 1 && styles.statCardLandscape
-                ]}>
-                  <Text style={styles.statValue}>
-                    {stats.total}
-                  </Text>
-                  <Text style={styles.statLabel}>
-                    Total Registers
-                  </Text>
-                </View>
-              </View>
-              
-              {/* Footer */}
-              <View style={styles.analyzerFooter}>
-                <Text style={styles.tapHint}>Tap to view registers</Text>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={18}
-                  color="rgba(255,255,255,0.8)"
-                />
-              </View>
+                </BlurView>
+              </GradientCard>
             </View>
-          </BlurView>
-        </GradientCard>
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
-      </Animated.View>
+      </MotiView>
     );
   };
 
@@ -798,11 +811,6 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
     
     const statusColor = getStatusColor(item.status || 'inactive');
     
-    // Seçili register için animasyonlu scale
-    const animatedStyle = draggedRegisterIndex === index
-      ? { transform: [{ scale: breathingAnimRegister }] }
-      : {};
-    
     // Calculate card width based on numColumns and device type
     // Tablet Portrait (810x1080): 2 columns with optimized padding
     // Tablet Landscape: 3 columns with optimized padding
@@ -816,32 +824,45 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
       : undefined;
     
     return (
-      <Animated.View style={[
-        animatedStyle,
-        registerCardWidth ? { width: registerCardWidth } : undefined
-      ]}>
-        <TouchableOpacity
-          onLongPress={() => handleRegisterLongPress(index)}
-          onPress={() => {
-            // Eğer bu register seçiliyse, seçimi kaldır
-            if (draggedRegisterIndex === index) {
-              handleRegisterPress(index);
-            } 
-            // Eğer başka bir register seçiliyse ve bu register'a drop yapılabilirse, drop yap
-            else if (draggedRegisterIndex !== undefined && draggedRegisterIndex !== index) {
-              handleRegisterDrop(index);
-            }
-          }}
-          activeOpacity={0.9}
-          delayLongPress={500}
-        >
-        <View style={[
-          styles.cardWrapper, 
-          isBeingDragged ? styles.beingDragged : undefined, 
-          canDrop ? styles.dropTarget : undefined,
-          numColumns > 1 ? { marginBottom: 0 } : undefined
-        ]}>
-          <Card
+      <MotiView
+        from={{ opacity: 0, scale: 0.95, translateY: 10 }}
+        animate={{ 
+          opacity: isTransitioning ? 0 : 1, 
+          scale: isTransitioning ? 0.95 : 1, 
+          translateY: isTransitioning ? 10 : 0 
+        }}
+        transition={{ 
+          type: 'spring', 
+          damping: 18, 
+          stiffness: 90, 
+          mass: 0.8,
+          delay: isTransitioning ? 0 : index * 40 
+        }}
+        style={registerCardWidth ? { width: registerCardWidth } : undefined}
+      >
+        <View>
+          <TouchableOpacity
+            onLongPress={() => handleRegisterLongPress(index)}
+            onPress={() => {
+              // Eğer bu register seçiliyse, seçimi kaldır
+              if (draggedRegisterIndex === index) {
+                handleRegisterPress(index);
+              } 
+              // Eğer başka bir register seçiliyse ve bu register'a drop yapılabilirse, drop yap
+              else if (draggedRegisterIndex !== undefined && draggedRegisterIndex !== index) {
+                handleRegisterDrop(index);
+              }
+            }}
+            activeOpacity={0.9}
+            delayLongPress={500}
+          >
+            <View style={[
+              styles.cardWrapper, 
+              isBeingDragged ? styles.beingDragged : undefined, 
+              canDrop ? styles.dropTarget : undefined,
+              numColumns > 1 ? { marginBottom: 0 } : undefined
+            ]}>
+              <Card
             style={[
               styles.registerCard,
               numColumns > 1 ? { marginBottom: 0 } : undefined,
@@ -1145,8 +1166,9 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
           </Card.Content>
         </Card>
       </View>
-      </TouchableOpacity>
-      </Animated.View>
+          </TouchableOpacity>
+        </View>
+      </MotiView>
     );
   };
 
@@ -1206,17 +1228,22 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
         sortedAnalyzers.push([id, groupedRegisters.get(id)!]);
       }
     });
-    
+
     return (
       <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
         <StatusBar style={isDarkMode ? "light" : "dark"} />
-        <Animated.View
-          style={{
-            flex: 1,
-            opacity: fadeAnim,
-            transform: [{ translateX: slideAnim }],
-          }}
-        >
+        
+        {/* Modern Gradient Background */}
+        <LinearGradient
+          colors={isDarkMode 
+            ? ['#0D1B2A', '#1B263B', '#415A77', '#778DA9']
+            : ['#E3F2FD', '#BBDEFB', '#90CAF9', '#64B5F6']}
+          style={StyleSheet.absoluteFillObject}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        
+        <Animated.View style={[{ flex: 1 }, screenStyle]}>
           <FlatList
           key={`analyzers-${isLandscape ? 'landscape' : 'portrait'}`}
           data={sortedAnalyzers}
@@ -1226,6 +1253,7 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
             styles.content,
             {
               paddingHorizontal: isTablet ? (isLandscape ? 16 : 20) : (isLandscape ? 20 : 16),
+              flexGrow: 1,
             },
             numColumns > 1 && styles.contentLandscape
           ]}
@@ -1240,6 +1268,8 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
               refreshing={isRefreshing} 
               onRefresh={handleRefresh} 
               colors={[paperTheme.colors.primary]}
+              progressViewOffset={80}
+              tintColor={paperTheme.colors.primary}
             />
           }
           ListEmptyComponent={
@@ -1285,19 +1315,21 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
       config={swipeConfig}
       style={{ flex: 1 }}
     >
-      <Animated.View
-        style={[
-          styles.container,
-          {
-            backgroundColor: paperTheme.colors.background,
-            opacity: fadeAnim,
-            transform: [{ translateX: slideAnim }],
-          }
-        ]}
-      >
+      <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
         <StatusBar style={isDarkMode ? "light" : "dark"} />
         
-        <FlatList
+        {/* Modern Gradient Background */}
+        <LinearGradient
+          colors={isDarkMode 
+            ? ['#0D1B2A', '#1B263B', '#415A77', '#778DA9']
+            : ['#E3F2FD', '#BBDEFB', '#90CAF9', '#64B5F6']}
+          style={StyleSheet.absoluteFillObject}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+        
+        <Animated.View style={[{ flex: 1 }, registerScreenStyle]}>
+          <FlatList
         key={`registers-${isLandscape ? 'landscape' : 'portrait'}-${numColumns}`}
         data={selectedRegisters}
         renderItem={renderRegisterItem}
@@ -1307,6 +1339,7 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
           { paddingTop: 8 },
           {
             paddingHorizontal: isTablet ? (isLandscape ? 16 : 20) : (isLandscape ? 20 : 16),
+            flexGrow: 1,
           },
           numColumns > 1 ? styles.contentLandscape : undefined
         ]}
@@ -1321,7 +1354,9 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
           <RefreshControl 
             refreshing={isRefreshing} 
             onRefresh={handleRefresh}
-            colors={[paperTheme.colors.primary]} 
+            colors={[paperTheme.colors.primary]}
+            progressViewOffset={80}
+            tintColor={paperTheme.colors.primary}
           />
         }
         ListEmptyComponent={
@@ -1341,7 +1376,8 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
         register={selectedRegister}
         onClose={() => setWriteModalVisible(false)}
       />
-      </Animated.View>
+        </Animated.View>
+      </View>
     </SwipeGestureRecognizer>
   );
 }

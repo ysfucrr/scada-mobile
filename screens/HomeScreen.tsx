@@ -1,7 +1,20 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import { MotiView } from 'moti';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View, TouchableOpacity } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedScrollHandler,
+  withTiming,
+  withSpring,
+  withRepeat,
+  withSequence,
+  Easing,
+  interpolate,
+} from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ActivityIndicator,
@@ -122,6 +135,109 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   
   // Callbacks ref
   const callbacksMapRef = useRef(new Map<string, (value: any) => void>());
+
+  // Animations - Reanimated 3
+  const tabIndicatorPosition = useSharedValue(0);
+  const backgroundPulse = useSharedValue(0);
+  const scrollY = useSharedValue(0);
+  const lastScrollY = useSharedValue(0);
+  const tabTranslateY = useSharedValue(0);
+  
+  useEffect(() => {
+    // Tab indicator animation
+    tabIndicatorPosition.value = withSpring(activeTab === 'overview' ? 0 : 1, {
+      damping: 15,
+      stiffness: 150,
+    });
+
+    // Background pulse animation
+    backgroundPulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+  }, [activeTab]);
+
+  // Animated styles
+  const tabIndicatorStyle = useAnimatedStyle(() => {
+    // Calculate tab width dynamically
+    const tabWidth = (screenWidth - 32 - 32) / 2; // screenWidth - margins - padding
+    const translateX = interpolate(
+      tabIndicatorPosition.value,
+      [0, 1],
+      [0, tabWidth]
+    );
+    return {
+      transform: [{ translateX }],
+    };
+  });
+
+  const backgroundStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(backgroundPulse.value, [0, 1], [0.03, 0.06]);
+    return {
+      opacity,
+    };
+  });
+
+  // Scroll handler for hiding/showing tab navigation
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const currentScrollY = event.contentOffset.y;
+      const scrollDelta = currentScrollY - lastScrollY.value;
+      
+      // Scroll threshold - minimum scroll distance to trigger hide/show
+      const threshold = 10;
+      
+      if (Math.abs(scrollDelta) > threshold) {
+        if (scrollDelta > 0 && currentScrollY > 50) {
+          // Scrolling down - hide tab navigation (translate up and out of view)
+          tabTranslateY.value = withTiming(-150, {
+            duration: 200,
+            easing: Easing.out(Easing.ease),
+          });
+        } else if (scrollDelta < 0) {
+          // Scrolling up - show tab navigation
+          tabTranslateY.value = withTiming(0, {
+            duration: 200,
+            easing: Easing.out(Easing.ease),
+          });
+        }
+      }
+      
+      scrollY.value = currentScrollY;
+      lastScrollY.value = currentScrollY;
+    },
+  });
+
+  // Animated style for tab navigation
+  const tabNavigationStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      tabTranslateY.value,
+      [-150, 0],
+      [0, 1],
+      'clamp'
+    );
+    return {
+      transform: [{ translateY: tabTranslateY.value }],
+      opacity,
+    };
+  });
+
+  // Animated style for scroll spacer (to prevent dead space when tab navigation is hidden)
+  const scrollSpacerStyle = useAnimatedStyle(() => {
+    const height = interpolate(
+      tabTranslateY.value,
+      [-150, 0],
+      [0, 76], // Space for tab navigation
+      'clamp'
+    );
+    return {
+      height,
+    };
+  });
 
   // Load appropriate data based on active tab
   useEffect(() => {
@@ -406,26 +522,44 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   const renderOverviewContent = () => {
     if (widgetsLoading) {
       return (
-        <View style={styles.loadingContainer}>
+        <MotiView
+          from={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', damping: 12, stiffness: 100 }}
+          style={styles.loadingContainer}
+        >
           <ActivityIndicator size="large" color={paperTheme.colors.primary} />
           <Text variant="bodyLarge" style={styles.loadingText}>Loading widgets...</Text>
-        </View>
+        </MotiView>
       );
     }
 
     if (widgets.length === 0) {
       return (
-        <View style={styles.emptyWidgetsContainer}>
+        <MotiView
+          from={{ opacity: 0, translateY: 20 }}
+          animate={{ opacity: 1, translateY: 0 }}
+          transition={{ type: 'spring', damping: 12, stiffness: 100 }}
+          style={styles.emptyWidgetsContainer}
+        >
           <GradientCard
-            colors={isDarkMode ? ['#263238', '#37474F'] : ['#E3F2FD', '#BBDEFB']}
+            colors={isDarkMode 
+              ? ['#1A237E', '#283593', '#3949AB'] 
+              : ['#E3F2FD', '#BBDEFB', '#90CAF9']}
             style={styles.emptyCard}
           >
             <View style={styles.emptyContent}>
-              <MaterialCommunityIcons
-                name="view-dashboard-outline"
-                size={80}
-                color={isDarkMode ? '#64B5F6' : '#1976D2'}
-              />
+              <MotiView
+                from={{ scale: 0, rotate: '0deg' }}
+                animate={{ scale: 1, rotate: '360deg' }}
+                transition={{ type: 'spring', damping: 8, stiffness: 100, delay: 200 }}
+              >
+                <MaterialCommunityIcons
+                  name="view-dashboard-outline"
+                  size={80}
+                  color={isDarkMode ? '#64B5F6' : '#1976D2'}
+                />
+              </MotiView>
               <Text variant="headlineSmall" style={[styles.emptyWidgetsText, { color: isDarkMode ? '#E3F2FD' : '#0D47A1' }]}>
                 No widgets configured
               </Text>
@@ -434,7 +568,7 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
               </Text>
             </View>
           </GradientCard>
-        </View>
+        </MotiView>
       );
     }
 
@@ -678,76 +812,149 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   
   // Render the main tab navigation
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: paperTheme.colors.background }]} edges={[]}>
+    <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
+      
+      {/* Modern Gradient Background */}
+      <LinearGradient
+        colors={isDarkMode 
+          ? ['#0D1B2A', '#1B263B', '#415A77', '#778DA9']
+          : ['#E3F2FD', '#BBDEFB', '#90CAF9', '#64B5F6']}
+        style={StyleSheet.absoluteFillObject}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+      
+      {/* Animated Background Overlay */}
+      <Animated.View 
+        style={[
+          StyleSheet.absoluteFillObject,
+          backgroundStyle,
+          {
+            backgroundColor: isDarkMode ? '#1E88E5' : '#42A5F5',
+          }
+        ]} 
+      />
 
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('overview')}
-          activeOpacity={0.7}
-        >
-          <IconButton
-            icon="view-dashboard-outline"
-            iconColor={activeTab === 'overview' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant}
-            size={24}
+      <SafeAreaView style={styles.safeArea} edges={[]}>
+        {/* Modern Tab Navigation */}
+        <Animated.View style={[styles.tabContainer, styles.tabContainerAbsolute, tabNavigationStyle]}>
+          <View style={styles.tabBackground}>
+            <Animated.View
+              style={[
+                styles.tabIndicator,
+                tabIndicatorStyle,
+                {
+                  backgroundColor: isDarkMode 
+                    ? 'rgba(255, 255, 255, 0.2)' 
+                    : 'rgba(255, 255, 255, 0.8)',
+                }
+              ]}
+            />
+          </View>
+          
+          <TouchableOpacity
+            style={styles.tabItem}
             onPress={() => setActiveTab('overview')}
-            mode={activeTab === 'overview' ? 'contained' : 'outlined'}
-            containerColor={activeTab === 'overview' ? paperTheme.colors.primaryContainer : undefined}
-            style={styles.tabButton}
-          />
-          <Text style={[
-            styles.tabLabel,
-            { color: activeTab === 'overview' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant }
-          ]}>
-            Overview
-          </Text>
-        </TouchableOpacity>
+            activeOpacity={0.8}
+          >
+            <MotiView
+              animate={{
+                scale: activeTab === 'overview' ? 1.1 : 1,
+              }}
+              transition={{ type: 'spring', damping: 10, stiffness: 200 }}
+            >
+              <IconButton
+                icon="view-dashboard-outline"
+                iconColor={activeTab === 'overview' 
+                  ? (isDarkMode ? '#FFFFFF' : '#1976D2')
+                  : (isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)')}
+                size={24}
+                onPress={() => setActiveTab('overview')}
+                style={styles.tabButton}
+              />
+            </MotiView>
+            <Text style={[
+              styles.tabLabel,
+              { 
+                color: activeTab === 'overview' 
+                  ? (isDarkMode ? '#FFFFFF' : '#1976D2')
+                  : (isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)'),
+                fontWeight: activeTab === 'overview' ? '700' : '500',
+              }
+            ]}>
+              Overview
+            </Text>
+          </TouchableOpacity>
 
-        <View style={styles.tabSpacer} />
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('system')}
-          activeOpacity={0.7}
-        >
-          <IconButton
-            icon="server"
-            iconColor={activeTab === 'system' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant}
-            size={24}
+          <TouchableOpacity
+            style={styles.tabItem}
             onPress={() => setActiveTab('system')}
-            mode={activeTab === 'system' ? 'contained' : 'outlined'}
-            containerColor={activeTab === 'system' ? paperTheme.colors.primaryContainer : undefined}
-            style={styles.tabButton}
-          />
-          <Text style={[
-            styles.tabLabel,
-            { color: activeTab === 'system' ? paperTheme.colors.primary : paperTheme.colors.onSurfaceVariant }
-          ]}>
-            System Health
-          </Text>
-        </TouchableOpacity>
-      </View>
+            activeOpacity={0.8}
+          >
+            <MotiView
+              animate={{
+                scale: activeTab === 'system' ? 1.1 : 1,
+              }}
+              transition={{ type: 'spring', damping: 10, stiffness: 200 }}
+            >
+              <IconButton
+                icon="server"
+                iconColor={activeTab === 'system' 
+                  ? (isDarkMode ? '#FFFFFF' : '#1976D2')
+                  : (isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)')}
+                size={24}
+                onPress={() => setActiveTab('system')}
+                style={styles.tabButton}
+              />
+            </MotiView>
+            <Text style={[
+              styles.tabLabel,
+              { 
+                color: activeTab === 'system' 
+                  ? (isDarkMode ? '#FFFFFF' : '#1976D2')
+                  : (isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)'),
+                fontWeight: activeTab === 'system' ? '700' : '500',
+              }
+            ]}>
+              System Health
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
 
-      {/* Tab content with simple ScrollView */}
-      <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-        }
-        showsVerticalScrollIndicator={true}
-        nestedScrollEnabled={false}
-      >
-        {activeTab === 'overview' ? renderOverviewContent() : renderSystemContent()}
-      </ScrollView>
-    </SafeAreaView>
+        {/* Tab content with simple ScrollView */}
+        <Animated.ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContent}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl 
+              refreshing={isRefreshing} 
+              onRefresh={handleRefresh}
+              colors={[paperTheme.colors.primary]}
+              progressViewOffset={70}
+              tintColor={paperTheme.colors.primary}
+            />
+          }
+          showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={false}
+        >
+          <Animated.View style={scrollSpacerStyle} />
+          {activeTab === 'overview' ? renderOverviewContent() : renderSystemContent()}
+        </Animated.ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+    overflow: 'hidden',
   },
   scrollContainer: {
     flex: 1,
@@ -759,23 +966,69 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(128,128,128,0.2)',
+    paddingVertical: 12,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    zIndex: 10,
+  },
+  tabContainerAbsolute: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    right: 0,
+    marginTop: 0,
+    marginBottom: 0,
+  },
+  tabBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 16,
+  },
+  tabIndicator: {
+    position: 'absolute',
+    top: 8,
+    bottom: 8,
+    left: 8,
+    width: '50%',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   tabItem: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    zIndex: 1,
   },
   tabButton: {
     margin: 0,
   },
   tabLabel: {
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  tabSpacer: {
-    flex: 1,
+    marginLeft: 6,
+    fontSize: 14,
+    letterSpacing: 0.3,
   },
   loadingContainer: {
     flex: 1,
