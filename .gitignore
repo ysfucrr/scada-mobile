@@ -3,3 +3,4 @@ node_modules
 android
 ios
 package-lock.json
+.DS_Store
