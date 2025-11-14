@@ -1,6 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { MotiView } from 'moti';
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import Animated, {
@@ -209,25 +208,9 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
                     ]}
                   >
                     {register.isLive && (
-                      <MotiView
-                        from={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: 'spring', damping: 8, stiffness: 200 }}
-                        style={styles.liveIndicator}
-                      >
-                        <MotiView
-                          animate={{
-                            scale: [1, 1.3, 1],
-                          }}
-                          transition={{
-                            type: 'timing',
-                            duration: 1500,
-                            loop: true,
-                            repeatReverse: true,
-                          }}
-                          style={styles.liveDot}
-                        />
-                      </MotiView>
+                      <View style={styles.liveIndicator}>
+                        <View style={styles.liveDot} />
+                      </View>
                     )}
                     
                     <View style={styles.registerContent}>
@@ -241,28 +224,16 @@ const WidgetCard: React.FC<WidgetCardProps> = ({
                       </Text>
                       
                       <View style={styles.valueContainer}>
-                        <MotiView
-                          animate={{
-                            scale: register.isLive ? [1, 1.05, 1] : 1,
-                          }}
-                          transition={{
-                            type: 'timing',
-                            duration: 1000,
-                            loop: register.isLive,
-                            repeatReverse: true,
-                          }}
+                        <Text
+                          style={[
+                            styles.registerValue,
+                            register.isLive && styles.liveValue,
+                          ]}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
                         >
-                          <Text
-                            style={[
-                              styles.registerValue,
-                              register.isLive && styles.liveValue,
-                            ]}
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                          >
-                            {register.value}
-                          </Text>
-                        </MotiView>
+                          {register.value}
+                        </Text>
                         {register.scaleUnit && (
                           <Text style={styles.unit} numberOfLines={1}>
                             {register.scaleUnit}

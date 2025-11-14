@@ -1,19 +1,16 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { MotiView } from 'moti';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, useWindowDimensions, View, TouchableOpacity } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   useAnimatedScrollHandler,
   withTiming,
   withSpring,
-  withRepeat,
-  withSequence,
-  Easing,
   interpolate,
+  Easing,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -138,10 +135,10 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
 
   // Animations - Reanimated 3
   const tabIndicatorPosition = useSharedValue(0);
-  const backgroundPulse = useSharedValue(0);
   const scrollY = useSharedValue(0);
   const lastScrollY = useSharedValue(0);
   const tabTranslateY = useSharedValue(0);
+  const pullToRefreshOffset = useSharedValue(0);
   
   useEffect(() => {
     // Tab indicator animation
@@ -149,16 +146,6 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
       damping: 15,
       stiffness: 150,
     });
-
-    // Background pulse animation
-    backgroundPulse.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      false
-    );
   }, [activeTab]);
 
   // Animated styles
@@ -175,18 +162,25 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
     };
   });
 
-  const backgroundStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(backgroundPulse.value, [0, 1], [0.03, 0.06]);
-    return {
-      opacity,
-    };
-  });
 
-  // Scroll handler for hiding/showing tab navigation
+  // Pull to refresh state
+  const pullToRefreshStartY = useRef(0);
+  
+  // Scroll handler for hiding/showing tab navigation and pull to refresh
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       const currentScrollY = event.contentOffset.y;
       const scrollDelta = currentScrollY - lastScrollY.value;
+      
+      // Calculate pull to refresh offset (negative scrollY means pulling down)
+      if (currentScrollY < 0) {
+        pullToRefreshOffset.value = Math.abs(currentScrollY);
+      } else {
+        pullToRefreshOffset.value = withTiming(0, {
+          duration: 200,
+          easing: Easing.out(Easing.ease),
+        });
+      }
       
       // Scroll threshold - minimum scroll distance to trigger hide/show
       const threshold = 10;
@@ -210,6 +204,57 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
       scrollY.value = currentScrollY;
       lastScrollY.value = currentScrollY;
     },
+  });
+  
+  // Handle pull to refresh manually
+  const handleScrollBeginDrag = (event: any) => {
+    pullToRefreshStartY.current = event.nativeEvent.contentOffset.y;
+  };
+  
+  const handleScrollEndDrag = (event: any) => {
+    const currentY = event.nativeEvent.contentOffset.y;
+    const pullDistance = Math.abs(currentY);
+    
+    // If user pulled down more than 80 pixels and is at the top
+    if (pullDistance > 150 && currentY < 0 && !isRefreshing) {
+      handleRefresh();
+    }
+    
+    // Reset pull offset
+    pullToRefreshOffset.value = withTiming(0, {
+      duration: 200,
+      easing: Easing.out(Easing.ease),
+    });
+  };
+  
+  // Animated style for pull to refresh arrow
+  const pullToRefreshArrowStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      pullToRefreshOffset.value,
+      [0, 30, 80],
+      [0, 0.5, 1],
+      'clamp'
+    );
+    const translateY = interpolate(
+      pullToRefreshOffset.value,
+      [0, 80],
+      [-20, 0],
+      'clamp'
+    );
+    const rotation = interpolate(
+      pullToRefreshOffset.value,
+      [0, 80],
+      [0, 180],
+      'clamp'
+    );
+    
+    return {
+      opacity,
+      transform: [
+        { translateY },
+        { rotate: `${rotation}deg` },
+      ],
+    };
   });
 
   // Animated style for tab navigation
@@ -522,26 +567,16 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
   const renderOverviewContent = () => {
     if (widgetsLoading) {
       return (
-        <MotiView
-          from={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'spring', damping: 12, stiffness: 100 }}
-          style={styles.loadingContainer}
-        >
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={paperTheme.colors.primary} />
           <Text variant="bodyLarge" style={styles.loadingText}>Loading widgets...</Text>
-        </MotiView>
+        </View>
       );
     }
 
     if (widgets.length === 0) {
       return (
-        <MotiView
-          from={{ opacity: 0, translateY: 20 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'spring', damping: 12, stiffness: 100 }}
-          style={styles.emptyWidgetsContainer}
-        >
+        <View style={styles.emptyWidgetsContainer}>
           <GradientCard
             colors={isDarkMode 
               ? ['#1A237E', '#283593', '#3949AB'] 
@@ -549,17 +584,11 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
             style={styles.emptyCard}
           >
             <View style={styles.emptyContent}>
-              <MotiView
-                from={{ scale: 0, rotate: '0deg' }}
-                animate={{ scale: 1, rotate: '360deg' }}
-                transition={{ type: 'spring', damping: 8, stiffness: 100, delay: 200 }}
-              >
-                <MaterialCommunityIcons
-                  name="view-dashboard-outline"
-                  size={80}
-                  color={isDarkMode ? '#64B5F6' : '#1976D2'}
-                />
-              </MotiView>
+              <MaterialCommunityIcons
+                name="view-dashboard-outline"
+                size={80}
+                color={isDarkMode ? '#64B5F6' : '#1976D2'}
+              />
               <Text variant="headlineSmall" style={[styles.emptyWidgetsText, { color: isDarkMode ? '#E3F2FD' : '#0D47A1' }]}>
                 No widgets configured
               </Text>
@@ -568,7 +597,7 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
               </Text>
             </View>
           </GradientCard>
-        </MotiView>
+        </View>
       );
     }
 
@@ -585,6 +614,17 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
           gap: numColumns > 1 ? widgetGap : undefined,
         }
       ]}>
+        {/* Pull to Refresh Arrow Indicator - only show in overview tab */}
+        {activeTab === 'overview' && (
+          <Animated.View style={[styles.pullToRefreshIndicator, pullToRefreshArrowStyle]}>
+            <MaterialCommunityIcons
+              name="arrow-down"
+              size={24}
+              color={isDarkMode ? '#64B5F6' : '#1976D2'}
+            />
+          </Animated.View>
+        )}
+        
         {widgets.map((widget, index) => (
           <WidgetCard
             key={widget._id}
@@ -825,16 +865,6 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
         end={{ x: 1, y: 1 }}
       />
       
-      {/* Animated Background Overlay */}
-      <Animated.View 
-        style={[
-          StyleSheet.absoluteFillObject,
-          backgroundStyle,
-          {
-            backgroundColor: isDarkMode ? '#1E88E5' : '#42A5F5',
-          }
-        ]} 
-      />
 
       <SafeAreaView style={styles.safeArea} edges={[]}>
         {/* Modern Tab Navigation */}
@@ -858,22 +888,15 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
             onPress={() => setActiveTab('overview')}
             activeOpacity={0.8}
           >
-            <MotiView
-              animate={{
-                scale: activeTab === 'overview' ? 1.1 : 1,
-              }}
-              transition={{ type: 'spring', damping: 10, stiffness: 200 }}
-            >
-              <IconButton
-                icon="view-dashboard-outline"
-                iconColor={activeTab === 'overview' 
-                  ? (isDarkMode ? '#FFFFFF' : '#1976D2')
-                  : (isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)')}
-                size={24}
-                onPress={() => setActiveTab('overview')}
-                style={styles.tabButton}
-              />
-            </MotiView>
+            <IconButton
+              icon="view-dashboard-outline"
+              iconColor={activeTab === 'overview' 
+                ? (isDarkMode ? '#FFFFFF' : '#1976D2')
+                : (isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)')}
+              size={24}
+              onPress={() => setActiveTab('overview')}
+              style={styles.tabButton}
+            />
             <Text style={[
               styles.tabLabel,
               { 
@@ -892,22 +915,15 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
             onPress={() => setActiveTab('system')}
             activeOpacity={0.8}
           >
-            <MotiView
-              animate={{
-                scale: activeTab === 'system' ? 1.1 : 1,
-              }}
-              transition={{ type: 'spring', damping: 10, stiffness: 200 }}
-            >
-              <IconButton
-                icon="server"
-                iconColor={activeTab === 'system' 
-                  ? (isDarkMode ? '#FFFFFF' : '#1976D2')
-                  : (isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)')}
-                size={24}
-                onPress={() => setActiveTab('system')}
-                style={styles.tabButton}
-              />
-            </MotiView>
+            <IconButton
+              icon="server"
+              iconColor={activeTab === 'system' 
+                ? (isDarkMode ? '#FFFFFF' : '#1976D2')
+                : (isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)')}
+              size={24}
+              onPress={() => setActiveTab('system')}
+              style={styles.tabButton}
+            />
             <Text style={[
               styles.tabLabel,
               { 
@@ -928,17 +944,12 @@ export default function HomeScreen({ isActive = true }: HomeScreenProps) {
           contentContainerStyle={styles.scrollContent}
           onScroll={scrollHandler}
           scrollEventThrottle={16}
-          refreshControl={
-            <RefreshControl 
-              refreshing={isRefreshing} 
-              onRefresh={handleRefresh}
-              colors={[paperTheme.colors.primary]}
-              progressViewOffset={70}
-              tintColor={paperTheme.colors.primary}
-            />
-          }
+          onScrollBeginDrag={handleScrollBeginDrag}
+          onScrollEndDrag={handleScrollEndDrag}
           showsVerticalScrollIndicator={true}
           nestedScrollEnabled={false}
+          bounces={true}
+          alwaysBounceVertical={true}
         >
           <Animated.View style={scrollSpacerStyle} />
           {activeTab === 'overview' ? renderOverviewContent() : renderSystemContent()}
@@ -1042,13 +1053,19 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   widgetsContainer: {
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 16,
   },
   widgetsContainerLandscape: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
+  },
+  pullToRefreshIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    height: 19,
   },
   emptyWidgetsContainer: {
     padding: 16,

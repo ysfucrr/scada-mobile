@@ -1425,6 +1425,28 @@ class ApiService {
       // Demo modu kontrolü
       if (await this.isDemoMode()) {
         console.log('[ApiService] Demo mode: returning demo consumption widget comparisons');
+        
+        // Generate demo monthly data for yearly view (12 months)
+        const currentYear = new Date().getFullYear();
+        const previousYear = currentYear - 1;
+        
+        // Generate 12 months of data for both years
+        const generateMonthlyData = (year: number, baseValue: number) => {
+          return Array.from({ length: 12 }, (_, monthIndex) => {
+            // Random variation between 80% and 120% of base value
+            const variation = 0.8 + (Math.random() * 0.4);
+            const monthValue = (baseValue / 12) * variation;
+            return {
+              month: monthIndex + 1,
+              value: Math.round(monthValue * 10) / 10,
+              timestamp: new Date(year, monthIndex, 15)
+            };
+          });
+        };
+        
+        const previousYearMonthlyData = generateMonthlyData(previousYear, 10250.5);
+        const currentYearMonthlyData = generateMonthlyData(currentYear, 11280.3);
+        
         // Demo data döndür
         return {
           success: true,
@@ -1443,12 +1465,17 @@ class ApiService {
               comparison: {
                 previousValue: 10250.5,
                 currentValue: 11280.3,
-                previousTimestamp: new Date(new Date().getFullYear() - 1, 0, 1),
-                currentTimestamp: new Date(new Date().getFullYear(), 0, 1),
+                previousTimestamp: new Date(previousYear, 0, 1),
+                currentTimestamp: new Date(currentYear, 0, 1),
                 percentageChange: 10.0,
                 timeFilter: 'year'
               },
-              monthlyData: null
+              monthlyData: {
+                currentYear: currentYearMonthlyData,
+                previousYear: previousYearMonthlyData,
+                currentYearLabel: currentYear,
+                previousYearLabel: previousYear
+              }
             },
             trendLog: {
               _id: id,

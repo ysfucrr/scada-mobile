@@ -7,7 +7,6 @@ import {
   View
 } from 'react-native';
 import { Card, useTheme as usePaperTheme } from 'react-native-paper';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import GradientCard from '../components/GradientCard';
 import { useTheme as useAppTheme } from '../context/ThemeContext';
 
@@ -20,7 +19,6 @@ export default function PrivacyPolicyScreen() {
   return (
     <View style={[styles.container, { backgroundColor: paperTheme.colors.background }]}>
       <StatusBar style={isDarkMode ? "light" : "dark"} />
-      <SafeAreaView edges={['top']} style={{ flex: 0 }} />
       
       <ScrollView
         style={styles.scrollView}
@@ -436,6 +434,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 16,
+    paddingTop: 20,
     paddingBottom: 40,
   },
   // Header Styles

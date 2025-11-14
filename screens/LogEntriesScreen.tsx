@@ -2,13 +2,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   BackHandler,
   FlatList,
   Modal,
   Platform,
-  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -114,6 +113,10 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
   const lastScrollY = useSharedValue(0);
   const filterTranslateY = useSharedValue(0);
   const targetTranslateY = useSharedValue(0);
+  const pullToRefreshOffset = useSharedValue(0);
+  
+  // Pull to refresh state
+  const pullToRefreshStartY = useRef(0);
   
   // Load log entries
   const loadEntries = async () => {
@@ -414,10 +417,20 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
     loadTodayEntries();
   }, [trendLog._id]); // Only run once when component mounts
 
-  // Scroll handler for hiding/showing filter section
+  // Scroll handler for hiding/showing filter section and pull to refresh
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       const currentScrollY = event.contentOffset.y;
+      
+      // Calculate pull to refresh offset (negative scrollY means pulling down)
+      if (currentScrollY < 0) {
+        pullToRefreshOffset.value = Math.abs(currentScrollY);
+      } else {
+        pullToRefreshOffset.value = withTiming(0, {
+          duration: 200,
+          easing: Easing.out(Easing.ease),
+        });
+      }
       
       // Threshold values for showing/hiding filter section
       const hideThreshold = 100; // Hide when scrolled down more than 100px
@@ -453,6 +466,57 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
       scrollY.value = currentScrollY;
       lastScrollY.value = currentScrollY;
     },
+  });
+  
+  // Handle pull to refresh manually
+  const handleScrollBeginDrag = (event: any) => {
+    pullToRefreshStartY.current = event.nativeEvent.contentOffset.y;
+  };
+  
+  const handleScrollEndDrag = (event: any) => {
+    const currentY = event.nativeEvent.contentOffset.y;
+    const pullDistance = Math.abs(currentY);
+    
+    // If user pulled down more than 80 pixels and is at the top
+    if (pullDistance > 150 && currentY < 0 && !isRefreshing) {
+      handleRefresh();
+    }
+    
+    // Reset pull offset
+    pullToRefreshOffset.value = withTiming(0, {
+      duration: 200,
+      easing: Easing.out(Easing.ease),
+    });
+  };
+  
+  // Animated style for pull to refresh arrow
+  const pullToRefreshArrowStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      pullToRefreshOffset.value,
+      [0, 30, 80],
+      [0, 0.5, 1],
+      'clamp'
+    );
+    const translateY = interpolate(
+      pullToRefreshOffset.value,
+      [0, 80],
+      [-20, 0],
+      'clamp'
+    );
+    const rotation = interpolate(
+      pullToRefreshOffset.value,
+      [0, 80],
+      [0, 180],
+      'clamp'
+    );
+    
+    return {
+      opacity,
+      transform: [
+        { translateY },
+        { rotate: `${rotation}deg` },
+      ],
+    };
   });
 
   // Animated style for filter section
@@ -730,7 +794,7 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
       
       {/* Log Entries List */}
       <Animated.FlatList
-        data={entries}
+        data={isRefreshing ? [] : entries}
         renderItem={({ item, index }) => (
           <LogEntryCard
             value={item.value}
@@ -745,19 +809,26 @@ export default function LogEntriesScreen({ trendLog, onBack, onTitleChange }: Lo
         contentContainerStyle={styles.listContent}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
-        ListHeaderComponent={<Animated.View style={scrollSpacerStyle} />}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={[paperTheme.colors.primary]}
-            progressViewOffset={170}
-            tintColor={paperTheme.colors.primary}
-          />
+        onScrollBeginDrag={handleScrollBeginDrag}
+        onScrollEndDrag={handleScrollEndDrag}
+        bounces={true}
+        alwaysBounceVertical={true}
+        ListHeaderComponent={
+          <View>
+            <Animated.View style={scrollSpacerStyle} />
+            {/* Pull to Refresh Arrow Indicator */}
+            <Animated.View style={[styles.pullToRefreshIndicator, pullToRefreshArrowStyle]}>
+              <MaterialCommunityIcons
+                name="arrow-down"
+                size={24}
+                color={isDarkMode ? '#64B5F6' : '#1976D2'}
+              />
+            </Animated.View>
+          </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            {isLoading ? (
+            {(isLoading || isRefreshing) ? (
               <>
                 <ActivityIndicator size="large" color={paperTheme.colors.primary} />
                 <PaperText variant="bodyLarge" style={styles.loadingText}>
@@ -933,8 +1004,14 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingTop: 24,
+    paddingTop: 8,
     flexGrow: 1,
+  },
+  pullToRefreshIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    height: 19,
   },
   modalContainer: {
     flex: 1,

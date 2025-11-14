@@ -25,8 +25,6 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSpring,
-  withRepeat,
-  withSequence,
   withDelay,
   Easing,
 } from 'react-native-reanimated';
@@ -91,9 +89,7 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
   const fadeAnim = useSharedValue(0);
   const slideAnim = useSharedValue(30);
   const logoScaleAnim = useSharedValue(0);
-  const logoRotateAnim = useSharedValue(0);
   const formOpacityAnim = useSharedValue(0);
-  const backgroundPulseAnim = useSharedValue(1);
 
   // Animated styles - Reanimated 3
   const contentStyle = useAnimatedStyle(() => ({
@@ -104,7 +100,6 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
   const logoStyle = useAnimatedStyle(() => ({
     transform: [
       { scale: logoScaleAnim.value },
-      { rotate: `${logoRotateAnim.value * 10}deg` },
     ],
   }));
 
@@ -113,36 +108,12 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
     transform: [{ translateY: formOpacityAnim.value * 20 }],
   }));
 
-  const backgroundStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: backgroundPulseAnim.value }],
-  }));
-
   useEffect(() => {
     // Start animations - Reanimated 3
     fadeAnim.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.ease) });
     slideAnim.value = withSpring(0, { damping: 8, stiffness: 50 });
     logoScaleAnim.value = withSpring(1, { damping: 6, stiffness: 40 });
     formOpacityAnim.value = withDelay(300, withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) }));
-
-    // Logo rotation animation
-    logoRotateAnim.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      false
-    );
-
-    // Background pulse animation
-    backgroundPulseAnim.value = withRepeat(
-      withSequence(
-        withTiming(1.05, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      false
-    );
 
     // Clear any previously selected agent before loading the login screen
     const clearPreviousAgent = async () => {
@@ -350,7 +321,7 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
   return (
     <View style={styles.container}>
       {/* Top Blue Section - Limited to upper portion */}
-      <Animated.View style={[styles.topBlueSection, backgroundStyle]}>
+      <View style={styles.topBlueSection}>
         <LinearGradient
           colors={['#0D47A1', '#1565C0', '#1E88E5', '#42A5F5']}
           style={StyleSheet.absoluteFillObject}
@@ -362,7 +333,7 @@ export default function LoginScreen({ onLoginSuccess, onNavigateToSettings }: Lo
         <View style={styles.decorativeCircle2} />
         <View style={styles.decorativeCircle3} />
         
-      </Animated.View>
+      </View>
       
       {/* Settings Button - Top Right (Outside topBlueSection for better touch handling) */}
       {onNavigateToSettings && (
