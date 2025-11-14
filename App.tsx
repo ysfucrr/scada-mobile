@@ -1259,6 +1259,18 @@ function MainApp() {
               onPress={async () => {
                 setShowSessionExpiredModal(false);
                 
+                // Session expired - logout user and reset state
+                try {
+                  await AuthService.logout();
+                } catch (error) {
+                  console.error('[App] Error during session expired logout:', error);
+                }
+                
+                // Reset authentication state
+                setCurrentUser(null);
+                setIsAuthenticated(false);
+                setIsMenuVisible(false); // Close menu if open
+                
                 // Small delay to ensure modal closes smoothly
                 setTimeout(() => {
                   // Check if server connection exists
