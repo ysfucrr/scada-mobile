@@ -2,7 +2,7 @@
   "expo": {
     "name": "scada-mobil",
     "slug": "scada-mobil",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,12 +16,13 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.yusuf.scadamobil",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
-    },
+  "supportsTablet": true,
+  "bundleIdentifier": "com.yusuf.scadamobil",
+  "buildNumber": "2",
+  "infoPlist": {
+    "ITSAppUsesNonExemptEncryption": false
+  }
+},
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
