@@ -780,13 +780,33 @@ export default function RegistersScreen({ isActive = true, onSelectedAnalyzerCha
     let displayValue: string | number;
     let showWritableLabel = false;
     
+    // Boolean register'lar için formatlama fonksiyonu
+    const formatBooleanValue = (value: any): string => {
+      if (value === true || value === 1 || value === '1' || value === 'true' || value === 'ON') {
+        return 'ON';
+      } else if (value === false || value === 0 || value === '0' || value === 'false' || value === 'OFF') {
+        return 'OFF';
+      }
+      return String(value);
+    };
+    
     if (isWritable) {
       displayValue = 'Writable';
       showWritableLabel = false;
     } else if (realTimeValue !== undefined) {
-      displayValue = realTimeValue;
+      // Boolean register'lar için özel formatlama
+      if (item.dataType === 'boolean') {
+        displayValue = formatBooleanValue(realTimeValue);
+      } else {
+        displayValue = realTimeValue;
+      }
     } else if (item.value !== undefined && item.value !== null) {
-      displayValue = item.value;
+      // Boolean register'lar için özel formatlama
+      if (item.dataType === 'boolean') {
+        displayValue = formatBooleanValue(item.value);
+      } else {
+        displayValue = item.value;
+      }
     } else {
       displayValue = 'N/A';
     }
